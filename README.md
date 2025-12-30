@@ -5,7 +5,7 @@
 - 쉘 파일을 실행하면 hostpad의 코드를 openwrt에 패치합니다. `./build_firmware.sh`
 #### ☺️협업 규칙
 - 각 팀원들은 저장소를 fork한 다음 작업 용도에 따라 브랜치를 생성해주세요.
-    - 브랜치 이름은 작업/내용 : github id 형식입니다. ex) feat/add PQC function : 21HoKim
+    - 브랜치 이름은 `Tag/설명 : github id` 형식입니다. ex) feat/add PQC function : 21HoKim
     - 
       |Tag|설명|예시|
       |-----|-----|-----|
