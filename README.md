@@ -7,3 +7,6 @@
 ```shell
 ./build_firmware.sh
 ```
+## ☺️협업 규칙
+- 각 팀원들은 저장소를 fork한 다음 수정 후 pull request를 날려주세요.
+- 파트장이 검수 후 최종 merge 합니다.
