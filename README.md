@@ -1,6 +1,10 @@
 ## 📌Team Network
 - 해당 페이지는 Network팀의 작업 레포입니다.
 오픈소스 공유기 펌웨어인 OpenWrt24.10 버전과 오픈소스 프로젝트 w1.fi 코드를 담고 있습니다.
+#### 🔗역할
+- Openwrt와 W1.fi의 코드를 분석합니다.
+- Openwrt의 WPA3-SAE구조에 PQC 로직을 추가합니다.
+- 실질적인 펌웨어 수정 및 배포를 담당합니다.
 #### ✅실행 구조
 - 쉘 파일을 실행하면 hostpad의 코드를 openwrt에 패치합니다. `./build_firmware.sh`
 #### ☺️협업 규칙
