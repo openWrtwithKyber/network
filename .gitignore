@@ -1,19 +1,30 @@
-# --- OpenWrt Build Artifacts (절대 올리면 안 됨) ---
-openwrt/bin/
-openwrt/build_dir/
-openwrt/staging_dir/
-openwrt/tmp/
-openwrt/logs/
-openwrt/dl/
-openwrt/feeds/
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.sublime-workspace
+*.sublime-project
 
-# --- Config Files (선택 사항) ---
-# .config는 빌드 설정을 담고 있어서 올리는 게 좋지만, 
-# .config.old 같은 백업 파일은 무시
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+*.log
+*.tmp
+*.bak
 *.old
 
-# --- OS & Editor Trash ---
-.DS_Store
-Thumbs.db
-*.swp
-*~
+*.zip
+*.tar.gz
+*.7z
+*.rar
+
+__pycache__/
+*.pyc
+venv/
+env/
