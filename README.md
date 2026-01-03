@@ -14,16 +14,17 @@
     - 
       |Tag|설명|예시|
       |-----|-----|-----|
-      |feat/|새로운 기능 추가|feat/oauth2-implementation|
+      |feat/|새로운 기능 추가 및 수정|feat/oauth2-implementation|
       |fix/|버그 수정|fix/memory-leak-bug|
       |docs/|문서 수정|docs/update-readme|
       |refactor/|기능 변화 없는 코드 구조 개선|refactor/optimize-loop|
       |test/|테스트 코드 추가|test/add-unit-tests|
       |chore/|그 외 정의할 수 없는 작업|chore/add emoticon|
       *추가할 Tag가 있으면 미리 말하고 추가해주세요.
-    - 커밋 메시지는 자유롭게 작성하되 자세하게 작성해주세요.
+    - 커밋 메시지는 자유롭게 작성하되 자세하게 작성해주세요. 구분 기호는 주의사항에 있는 특수기호 `/` 와 `-` 만 사용해주세요.
       
 - 수정 후 `master` 브랜치로 `pull request`를 날려주세요.
 - 파트장이 검수 후 최종 `merge` 합니다.
 #### ⚠️주의사항
-- `main` 브랜치를 수정하지마세요. `main` 브랜치는 원본 코드의 내용이 존재해야 합니다.
+- `main` 브랜치와 `master` 브랜치에서 코드를 수정하지마세요. `main` 브랜치는 원본 코드의 내용이 존재해야 하고 `master` 브랜치는 최종 작업물이 존재해야 합니다.
+- `/`와 `-`를 사용하세요. `_` 같은 특수기호를 사용하지 마세요.
