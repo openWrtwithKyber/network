@@ -10,7 +10,7 @@
 #### ☺️협업 규칙
 - 각 팀원들은 저장소를 fork하거나 clone한 다음 작업 용도에 따라 브랜치를 생성해주세요.
     - 작업 최종 브랜치는 `master` 입니다. `master` 브랜치는 최종 빌드 결과물 소스코드가 들어갑니다.
-    - 작업 브랜치 이름은 `Tag/설명 : github id` 형식입니다. ex) `feat/add PQC function : 21HoKim`
+    - 작업 브랜치 이름은 `Tag/설명` 형식입니다. ex) `feat/add PQC function`
     - 
       |Tag|설명|예시|
       |-----|-----|-----|
