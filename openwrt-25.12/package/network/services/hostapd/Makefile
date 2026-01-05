@@ -8,6 +8,7 @@ PKG_NAME:=hostapd
 PKG_VERSION:=2025.08.26
 PKG_RELEASE:=1
 
+#--로컬에서 코드를 가져오기 위해 주석처리--#
 #PKG_SOURCE_URL:=https://w1.fi/hostap.git
 #PKG_SOURCE_PROTO:=git
 #PKG_SOURCE_DATE:=2025-08-26
@@ -585,27 +586,15 @@ ifneq ($(wildcard $(PKG_BUILD_DIR)/.config_*),$(subst .configured_,.config_,$(ST
 endif
 
 define Build/Prepare
-# 1. 빌드 디렉토리 초기화
 	mkdir -p $(PKG_BUILD_DIR)
 	rm -rf $(PKG_BUILD_DIR)/*
-
-	# 2. [사용자 로컬 소스 복사]
-	# 먼저 사용자의 hostapd 소스를 가져옵니다.
 	rsync -av --exclude '.git' $(TOPDIR)/../hostap/ $(PKG_BUILD_DIR)/
 
-	# 3. [OpenWrt 필수 파일 복사 - 복구된 부분!]
-	# hostapd 패키지 안에 들어있는 OpenWrt 전용 소스(ubus 관련 등)를 덮어씁니다.
-	# 이 과정이 빠져서 ubus.h가 사라졌던 것입니다.
-	# (-r: 재귀적, -n: 덮어쓰지 않음 옵션은 제거하여 OpenWrt 파일을 우선시 함)
 	cp -fpR ./src/* $(PKG_BUILD_DIR)/ 2>/dev/null || :
 
-	# 4. [Variant 빌드 디렉토리 동기화]
-	# 컴파일러가 바라보는 ../hostapd 경로 등을 위해 상위 폴더에도 복사 (필요 시)
 	if [ -d "$(PKG_BUILD_DIR)/../hostapd" ]; then \
 		rsync -av --exclude '.git' $(PKG_BUILD_DIR)/ $(PKG_BUILD_DIR)/../hostapd/; \
 	fi
-
-	# 5. 패치 적용
 	$(Build/Patch)
 endef
 
