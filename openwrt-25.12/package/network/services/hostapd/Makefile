@@ -5,13 +5,15 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=hostapd
+PKG_VERSION:=2025.08.26
 PKG_RELEASE:=1
 
-PKG_SOURCE_URL:=https://w1.fi/hostap.git
-PKG_SOURCE_PROTO:=git
-PKG_SOURCE_DATE:=2025-08-26
-PKG_SOURCE_VERSION:=ca266cc24d8705eb1a2a0857ad326e48b1408b20
-PKG_MIRROR_HASH:=59ac677093f524ff98588abd9f33805a336a6e929d6814222f0d784c854f2343
+#--로컬에서 코드를 가져오기 위해 주석처리--#
+#PKG_SOURCE_URL:=https://w1.fi/hostap.git
+#PKG_SOURCE_PROTO:=git
+#PKG_SOURCE_DATE:=2025-08-26
+#PKG_SOURCE_VERSION:=ca266cc24d8705eb1a2a0857ad326e48b1408b20
+#PKG_MIRROR_HASH:=59ac677093f524ff98588abd9f33805a336a6e929d6814222f0d784c854f2343
 
 PKG_MAINTAINER:=Felix Fietkau <nbd@nbd.name>
 PKG_LICENSE:=BSD-3-Clause
@@ -582,6 +584,19 @@ ifneq ($(wildcard $(PKG_BUILD_DIR)/.config_*),$(subst .configured_,.config_,$(ST
 	touch $(subst .configured_,.config_,$(STAMP_CONFIGURED))
   endef
 endif
+
+define Build/Prepare
+	mkdir -p $(PKG_BUILD_DIR)
+	rm -rf $(PKG_BUILD_DIR)/*
+	rsync -av --exclude '.git' $(TOPDIR)/../hostap/ $(PKG_BUILD_DIR)/
+
+	cp -fpR ./src/* $(PKG_BUILD_DIR)/ 2>/dev/null || :
+
+	if [ -d "$(PKG_BUILD_DIR)/../hostapd" ]; then \
+		rsync -av --exclude '.git' $(PKG_BUILD_DIR)/ $(PKG_BUILD_DIR)/../hostapd/; \
+	fi
+	$(Build/Patch)
+endef
 
 define Build/Configure
 	$(Build/Configure/rebuild)
