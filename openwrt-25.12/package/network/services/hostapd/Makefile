@@ -184,7 +184,7 @@ endef
 define Package/hostapd/config
   config HOSTAPD_PQC_SUPPORT
     bool "Enable Post-Quantum Cryptography (PQC) support"
-    depends on PACKAGE_hostapd-full-openssl
+    depends on PACKAGE_hostapd-openssl
     help
       Enable liboqs integration for quantum-safe crypto.
 endef
