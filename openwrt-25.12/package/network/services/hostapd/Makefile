@@ -152,6 +152,14 @@ ifeq ($(SSL_VARIANT),mbedtls)
   endif
 endif
 
+ifneq ($(CONFIG_HOSTAPD_PQC_SUPPORT),)
+  TARGET_CPPFLAGS += -DPQC_ENABLED
+  TARGET_LDFLAGS += -loqs
+endif
+
+ifneq ($(LOCAL_TYPE),hostapd)
+  ifdef CONFIG_WPA_RFKILL_SUPPORT
+
 ifneq ($(LOCAL_TYPE),hostapd)
   ifdef CONFIG_WPA_RFKILL_SUPPORT
     DRIVER_MAKEOPTS += NEED_RFKILL=y
@@ -167,12 +175,21 @@ define Package/hostapd/Default
   SUBMENU:=WirelessAPD
   TITLE:=IEEE 802.1x Authenticator
   URL:=https://w1.fi/hostapd/
-  DEPENDS:=$(DRV_DEPENDS) +hostapd-common $(CORE_DEPENDS) +liboqs +libopenssl-oqsprovider
+  DEPENDS:=$(DRV_DEPENDS) +hostapd-common $(CORE_DEPENDS) \
+	$(if $(CONFIG_HOSTAPD_PQC_SUPPORT),+liboqs +libopenssl-oqsprovider)
   EXTRA_DEPENDS:=hostapd-common (=$(PKG_VERSION)-r$(PKG_RELEASE))
   USERID:=network=101:network=101
   PROVIDES:=hostapd
   CONFLICTS:=$(HOSTAPD_PROVIDERS)
   HOSTAPD_PROVIDERS+=$(1)
+endef
+
+define Package/hostapd/config
+  config HOSTAPD_PQC_SUPPORT
+    bool "Enable Post-Quantum Cryptography (PQC) support"
+    depends on PACKAGE_hostapd-full-openssl
+    help
+      Enable liboqs integration for quantum-safe crypto.
 endef
 
 define Package/hostapd
@@ -616,7 +633,7 @@ TARGET_CPPFLAGS := \
 	-D_GNU_SOURCE \
 	$(if $(CONFIG_WPA_MSG_MIN_PRIORITY),-DCONFIG_MSG_MIN_PRIORITY=$(CONFIG_WPA_MSG_MIN_PRIORITY))
 
-TARGET_LDFLAGS += -lubox -lubus -lblobmsg_json -lucode -lm -lnl-tiny -ludebug -loqs
+TARGET_LDFLAGS += -lubox -lubus -lblobmsg_json -lucode -lm -lnl-tiny -ludebug
 
 ifdef CONFIG_WPA_ENABLE_WEP
     DRIVER_MAKEOPTS += CONFIG_WEP=y
