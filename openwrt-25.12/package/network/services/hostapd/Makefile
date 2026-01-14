@@ -159,9 +159,6 @@ endif
 
 ifneq ($(LOCAL_TYPE),hostapd)
   ifdef CONFIG_WPA_RFKILL_SUPPORT
-
-ifneq ($(LOCAL_TYPE),hostapd)
-  ifdef CONFIG_WPA_RFKILL_SUPPORT
     DRIVER_MAKEOPTS += NEED_RFKILL=y
   endif
 endif
