@@ -123,9 +123,6 @@ ifeq ($(SSL_VARIANT),openssl)
   ifeq ($(LOCAL_VARIANT),full)
     DRIVER_MAKEOPTS += CONFIG_OWE=y CONFIG_SUITEB192=y CONFIG_AP=y CONFIG_MESH=y CONFIG_EAP_PWD=y CONFIG_DPP=y CONFIG_DPP2=y
   endif
-	ifeq ($(LOCAL_VARIANT),pqc)
-    DRIVER_MAKEOPTS += CONFIG_OWE=y CONFIG_PQC=y #w1.fi의 makefile을 수정하여 사용 가능해진 옵션 (원본엔 없는거임)
-  endif
 endif
 
 ifeq ($(SSL_VARIANT),wolfssl)
@@ -156,6 +153,12 @@ ifeq ($(SSL_VARIANT),mbedtls)
   ifeq ($(LOCAL_VARIANT),full)
     DRIVER_MAKEOPTS += CONFIG_OWE=y CONFIG_SUITEB192=y CONFIG_AP=y CONFIG_MESH=y CONFIG_WPS_NFC=1 CONFIG_EAP_PWD=y CONFIG_DPP=y CONFIG_DPP2=y
   endif
+endif
+
+# PQC variant configuration (independent of SSL variant)
+ifeq ($(LOCAL_VARIANT),pqc)
+  DRIVER_MAKEOPTS += CONFIG_OWE=y CONFIG_PQC=y
+  TARGET_LDFLAGS += -loqs
 endif
 
 ifneq ($(LOCAL_TYPE),hostapd)
@@ -201,15 +204,17 @@ endef
 
 Package/hostapd-openssl/description = $(Package/hostapd/description)
 
-define Package/hostapd-openssl-pqc
-  $(call Package/hostapd/Default,$(1))
-  TITLE+= (OpenSSL PQC)
-  VARIANT:=pqc-openssl
-  DEPENDS+=$(OPENSSL_DEPENDS) +liboqs
-  CONFLICTS:=$(HOSTAPD_PROVIDERS)
+define Package/hostapd-pqc
+$(call Package/hostapd/Default,$(1))
+  TITLE+= (PQC, WPA-PSK, 11r, 11w)
+  VARIANT:=pqc
+  DEPENDS+=+liboqs
 endef
 
-Package/hostapd-openssl-pqc/description = $(Package/hostapd/description) with Post-Quantum Cryptography support.
+define Package/hostapd-pqc/description
+ This package contains a basic IEEE 802.1x/WPA Authenticator with WPA-PSK, 802.11r and 802.11w support,
+ plus Post-Quantum Cryptography support using liboqs library for quantum-resistant algorithms like Kyber768.
+endef
 
 define Package/hostapd-wolfssl
 $(call Package/hostapd/Default,$(1))
@@ -742,7 +747,7 @@ Package/wpad-wolfssl/conffiles = $(Package/hostapd-full/conffiles)
 Package/wpad-mbedtls/conffiles = $(Package/hostapd-full/conffiles)
 Package/hostapd/conffiles = $(Package/hostapd-full/conffiles)
 Package/hostapd-openssl/conffiles = $(Package/hostapd-full/conffiles)
-Package/hostapd-openssl-pqc/conffiles = $(Package/hostapd-full/conffiles)
+Package/hostapd-pqc/conffiles = $(Package/hostapd-full/conffiles)
 Package/hostapd-wolfssl/conffiles = $(Package/hostapd-full/conffiles)
 Package/hostapd-mbedtls/conffiles = $(Package/hostapd-full/conffiles)
 endif
@@ -781,7 +786,7 @@ Package/hostapd-basic-wolfssl/install = $(Package/hostapd/install)
 Package/hostapd-basic-mbedtls/install = $(Package/hostapd/install)
 Package/hostapd-mini/install = $(Package/hostapd/install)
 Package/hostapd-openssl/install = $(Package/hostapd/install)
-Package/hostapd-openssl-pqc/install = $(Package/hostapd/install)
+Package/hostapd-pqc/install = $(Package/hostapd/install)
 Package/hostapd-wolfssl/install = $(Package/hostapd/install)
 Package/hostapd-mbedtls/install = $(Package/hostapd/install)
 
@@ -870,7 +875,7 @@ $(eval $(call BuildPackage,hostapd-basic-wolfssl))
 $(eval $(call BuildPackage,hostapd-basic-mbedtls))
 $(eval $(call BuildPackage,hostapd-mini))
 $(eval $(call BuildPackage,hostapd-openssl))
-$(eval $(call BuildPackage,hostapd-openssl-pqc))
+$(eval $(call BuildPackage,hostapd-pqc))
 $(eval $(call BuildPackage,hostapd-wolfssl))
 $(eval $(call BuildPackage,hostapd-mbedtls))
 $(eval $(call BuildPackage,wpad))

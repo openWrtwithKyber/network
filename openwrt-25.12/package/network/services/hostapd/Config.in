@@ -66,7 +66,7 @@ config WPA_MBO_SUPPORT
 
 config WPA_PQC_SUPPORT
 	bool "Enable WPA-PQC (Post-Quantum Cryptography)"
-	depends on PACKAGE_hostapd-openssl-pqc
+	depends on PACKAGE_hostapd-pqc
 	default y
 	help
 	  Enable Post-Quantum Cryptography support using liboqs library.
