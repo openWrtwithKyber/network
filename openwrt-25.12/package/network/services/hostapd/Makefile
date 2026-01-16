@@ -205,7 +205,7 @@ define Package/hostapd-openssl-pqc
   $(call Package/hostapd/Default,$(1))
   TITLE+= (OpenSSL PQC)
   VARIANT:=pqc-openssl
-  DEPENDS+=$(OPENSSL_DEPENDS) +liboqs +libopenssl-oqsprovider
+  DEPENDS+=$(OPENSSL_DEPENDS) +liboqs
   CONFLICTS:=$(HOSTAPD_PROVIDERS)
 endef
 
