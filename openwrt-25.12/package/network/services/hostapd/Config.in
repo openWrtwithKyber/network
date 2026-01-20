@@ -63,3 +63,12 @@ config WPA_MBO_SUPPORT
 	  that facilitate efficient use of multiple frequency bands.
 	  Enabling MBO on an AP using RSN requires 802.11w to be enabled.
 	  Hostapd will refuse to start if MBO and RSN are enabled without 11w.
+
+config WPA_PQC_SUPPORT
+	bool "Enable WPA-PQC (Post-Quantum Cryptography)"
+	depends on PACKAGE_hostapd-pqc
+	default y
+	help
+	  Enable Post-Quantum Cryptography support using liboqs library.
+	  This enables support for quantum-resistant algorithms like Kyber768 (ML-KEM-768).
+	  Requires liboqs library to be installed.
