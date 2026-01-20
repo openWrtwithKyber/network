@@ -123,10 +123,6 @@ ifeq ($(SSL_VARIANT),openssl)
   ifeq ($(LOCAL_VARIANT),full)
     DRIVER_MAKEOPTS += CONFIG_OWE=y CONFIG_SUITEB192=y CONFIG_AP=y CONFIG_MESH=y CONFIG_EAP_PWD=y CONFIG_DPP=y CONFIG_DPP2=y
   endif
-  ifeq ($(LOCAL_VARIANT),pqc)
-    DRIVER_MAKEOPTS += CONFIG_OWE=y CONFIG_PQC=y
-    TARGET_LDFLAGS += -loqs
-  endif
 endif
 
 ifeq ($(SSL_VARIANT),wolfssl)
@@ -157,6 +153,12 @@ ifeq ($(SSL_VARIANT),mbedtls)
   ifeq ($(LOCAL_VARIANT),full)
     DRIVER_MAKEOPTS += CONFIG_OWE=y CONFIG_SUITEB192=y CONFIG_AP=y CONFIG_MESH=y CONFIG_WPS_NFC=1 CONFIG_EAP_PWD=y CONFIG_DPP=y CONFIG_DPP2=y
   endif
+endif
+
+# PQC variant configuration (with SAE support for WPA3)
+ifeq ($(LOCAL_VARIANT),pqc)
+  DRIVER_MAKEOPTS += CONFIG_SAE=y CONFIG_OWE=y CONFIG_PQC=y
+  TARGET_LDFLAGS += -loqs
 endif
 
 ifneq ($(LOCAL_TYPE),hostapd)
@@ -205,8 +207,8 @@ Package/hostapd-openssl/description = $(Package/hostapd/description)
 define Package/hostapd-pqc
   $(call Package/hostapd/Default,$(1))
   TITLE+= (WPA3-SAE + PQC)
-  VARIANT:=pqc-openssl
-  DEPENDS+=$(OPENSSL_DEPENDS) +liboqs
+  VARIANT:=pqc
+  DEPENDS+=+liboqs
 endef
 
 define Package/hostapd-pqc/description
