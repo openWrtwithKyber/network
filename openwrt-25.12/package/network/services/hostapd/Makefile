@@ -123,6 +123,10 @@ ifeq ($(SSL_VARIANT),openssl)
   ifeq ($(LOCAL_VARIANT),full)
     DRIVER_MAKEOPTS += CONFIG_OWE=y CONFIG_SUITEB192=y CONFIG_AP=y CONFIG_MESH=y CONFIG_EAP_PWD=y CONFIG_DPP=y CONFIG_DPP2=y
   endif
+  ifeq ($(LOCAL_VARIANT),pqc)
+    DRIVER_MAKEOPTS += CONFIG_OWE=y CONFIG_PQC=y
+    TARGET_LDFLAGS += -loqs
+  endif
 endif
 
 ifeq ($(SSL_VARIANT),wolfssl)
@@ -153,12 +157,6 @@ ifeq ($(SSL_VARIANT),mbedtls)
   ifeq ($(LOCAL_VARIANT),full)
     DRIVER_MAKEOPTS += CONFIG_OWE=y CONFIG_SUITEB192=y CONFIG_AP=y CONFIG_MESH=y CONFIG_WPS_NFC=1 CONFIG_EAP_PWD=y CONFIG_DPP=y CONFIG_DPP2=y
   endif
-endif
-
-# PQC variant configuration (independent of SSL variant)
-ifeq ($(LOCAL_VARIANT),pqc)
-  DRIVER_MAKEOPTS += CONFIG_OWE=y CONFIG_PQC=y
-  TARGET_LDFLAGS += -loqs
 endif
 
 ifneq ($(LOCAL_TYPE),hostapd)
@@ -206,14 +204,15 @@ Package/hostapd-openssl/description = $(Package/hostapd/description)
 
 define Package/hostapd-pqc
   $(call Package/hostapd/Default,$(1))
-  TITLE+= (WPA-PSK + PQC)
-  VARIANT:=pqc
-  DEPENDS+=+liboqs
+  TITLE+= (WPA3-SAE + PQC)
+  VARIANT:=pqc-openssl
+  DEPENDS+=$(OPENSSL_DEPENDS) +liboqs
 endef
 
 define Package/hostapd-pqc/description
- This package contains a basic IEEE 802.1x/WPA Authenticator with WPA-PSK, 802.11r and 802.11w support,
+ This package contains a IEEE 802.1x/WPA Authenticator with WPA3-SAE support,
  plus Post-Quantum Cryptography support using liboqs library for quantum-resistant algorithms like Kyber768.
+ PQC is integrated with WPA3-SAE authentication process.
 endef
 
 define Package/hostapd-wolfssl
