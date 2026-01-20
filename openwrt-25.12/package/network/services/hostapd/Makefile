@@ -205,8 +205,8 @@ endef
 Package/hostapd-openssl/description = $(Package/hostapd/description)
 
 define Package/hostapd-pqc
-$(call Package/hostapd/Default,$(1))
-  TITLE+= (PQC, WPA-PSK, 11r, 11w)
+  $(call Package/hostapd/Default,$(1))
+  TITLE+= (WPA-PSK + PQC)
   VARIANT:=pqc
   DEPENDS+=+liboqs
 endef
