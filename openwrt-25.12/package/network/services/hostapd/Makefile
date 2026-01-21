@@ -55,15 +55,17 @@ LOCAL_VARIANT=$(patsubst %-internal,%,\
 	      $(patsubst %-openssl,%,\
 	      $(patsubst %-wolfssl,%,\
 	      $(patsubst %-mbedtls,%,\
+	      $(patsubst %-pqc-mbedtls,pqc,\
 	      $(LOCAL_AND_LIB_VARIANT)\
-	      ))))
+	      )))))
 
 SSL_VARIANT=$(strip \
 		$(if $(findstring openssl,$(LOCAL_AND_LIB_VARIANT)),openssl,\
 		$(if $(findstring wolfssl,$(LOCAL_AND_LIB_VARIANT)),wolfssl,\
 		$(if $(findstring mbedtls,$(LOCAL_AND_LIB_VARIANT)),mbedtls,\
+		$(if $(findstring pqc-mbedtls,$(LOCAL_AND_LIB_VARIANT)),mbedtls,\
 		internal\
-		))))
+		)))))
 
 CONFIG_VARIANT:=$(LOCAL_VARIANT)
 ifeq ($(LOCAL_VARIANT),mesh)
@@ -155,10 +157,11 @@ ifeq ($(SSL_VARIANT),mbedtls)
   endif
 endif
 
-# PQC variant configuration (with SAE support for WPA3)
+# PQC variant configuration (with SAE support for WPA3, uses mbedTLS)
+# Inherits mbedtls settings from above (SSL_VARIANT=mbedtls)
 ifeq ($(LOCAL_VARIANT),pqc)
-  DRIVER_MAKEOPTS += CONFIG_SAE=y CONFIG_OWE=y CONFIG_PQC=y CONFIG_TLS=openssl
-  TARGET_LDFLAGS += -loqs -lcrypto -lssl
+  DRIVER_MAKEOPTS += CONFIG_PQC=y
+  TARGET_LDFLAGS += -loqs
 endif
 
 ifneq ($(LOCAL_TYPE),hostapd)
@@ -204,19 +207,6 @@ endef
 
 Package/hostapd-openssl/description = $(Package/hostapd/description)
 
-define Package/hostapd-pqc
-  $(call Package/hostapd/Default,$(1))
-  TITLE+= (OpenSSL full and PQC)
-  VARIANT:=pqc
-  DEPENDS+=$(OPENSSL_DEPENDS) +liboqs
-endef
-
-define Package/hostapd-pqc/description
- This package contains a IEEE 802.1x/WPA Authenticator with WPA3-SAE support,
- plus Post-Quantum Cryptography support using liboqs library for quantum-resistant algorithms like Kyber768.
- PQC is integrated with WPA3-SAE authentication process.
-endef
-
 define Package/hostapd-wolfssl
 $(call Package/hostapd/Default,$(1))
   TITLE+= (wolfSSL full)
@@ -234,6 +224,20 @@ $(call Package/hostapd/Default,$(1))
 endef
 
 Package/hostapd-mbedtls/description = $(Package/hostapd/description)
+
+define Package/hostapd-pqc
+  $(call Package/hostapd/Default,$(1))
+  TITLE+= (mbedTLS WPA3-SAE and PQC)
+  VARIANT:=pqc-mbedtls
+  DEPENDS+=liboqs +PACKAGE_hostapd-pqc:libmbedtls
+endef
+
+define Package/hostapd-pqc/description
+ This package contains a IEEE 802.1x/WPA Authenticator with WPA3-SAE support,
+ plus Post-Quantum Cryptography support using liboqs library for quantum-resistant algorithms like Kyber768.
+ Uses mbedTLS for TLS/crypto operations (same library as hostapd-mbedtls).
+ PQC is integrated with WPA3-SAE authentication process.
+endef
 
 define Package/hostapd-basic
 $(call Package/hostapd/Default,$(1))
