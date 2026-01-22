@@ -28,6 +28,8 @@ if [ "$1" == "full" ]; then
         exit 1
     fi
     echo "✅ Full build completed successfully."
+    echo "🎉 Script exiting early as full build was requested and succeeded."
+    exit 0
 else
     echo "⏩ Skipping full build. (Run './build.sh full' if dependencies are missing)"
 fi
