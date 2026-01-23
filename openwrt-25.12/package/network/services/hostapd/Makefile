@@ -160,7 +160,7 @@ endif
 # PQC variant configuration (with SAE support for WPA3, uses mbedTLS)
 # Inherits mbedtls settings from above (SSL_VARIANT=mbedtls)
 ifeq ($(LOCAL_VARIANT),pqc)
-  DRIVER_MAKEOPTS += CONFIG_PQC=y
+  DRIVER_MAKEOPTS += CONFIG_PQC=y CONFIG_GCMP=y CONFIG_SUITEB192=y
   TARGET_LDFLAGS += -loqs
 endif
 
