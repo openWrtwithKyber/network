@@ -55,7 +55,7 @@ LOCAL_VARIANT=$(patsubst %-internal,%,\
 	      $(patsubst %-openssl,%,\
 	      $(patsubst %-wolfssl,%,\
 	      $(patsubst %-mbedtls,%,\
-	      $(patsubst %-pqc-mbedtls,pqc,\
+	      $(patsubst %-pqc-openssl,pqc,\
 	      $(LOCAL_AND_LIB_VARIANT)\
 	      )))))
 
@@ -63,16 +63,11 @@ SSL_VARIANT=$(strip \
 		$(if $(findstring openssl,$(LOCAL_AND_LIB_VARIANT)),openssl,\
 		$(if $(findstring wolfssl,$(LOCAL_AND_LIB_VARIANT)),wolfssl,\
 		$(if $(findstring mbedtls,$(LOCAL_AND_LIB_VARIANT)),mbedtls,\
-		$(if $(findstring pqc-mbedtls,$(LOCAL_AND_LIB_VARIANT)),mbedtls,\
 		internal\
-		)))))
+		))))
 
 CONFIG_VARIANT:=$(LOCAL_VARIANT)
 ifeq ($(LOCAL_VARIANT),mesh)
-  CONFIG_VARIANT:=full
-endif
-
-ifeq ($(LOCAL_VARIANT),pqc)
   CONFIG_VARIANT:=full
 endif
 
@@ -125,6 +120,9 @@ ifeq ($(SSL_VARIANT),openssl)
   ifeq ($(LOCAL_VARIANT),full)
     DRIVER_MAKEOPTS += CONFIG_OWE=y CONFIG_SUITEB192=y CONFIG_AP=y CONFIG_MESH=y CONFIG_EAP_PWD=y CONFIG_DPP=y CONFIG_DPP2=y
   endif
+	ifeq ($(LOCAL_VARIANT),pqc)
+    DRIVER_MAKEOPTS += CONFIG_SUITEB192=y CONFIG_AP=y CONFIG_IEEE80211W=y
+  endif
 endif
 
 ifeq ($(SSL_VARIANT),wolfssl)
@@ -157,8 +155,7 @@ ifeq ($(SSL_VARIANT),mbedtls)
   endif
 endif
 
-# PQC variant configuration (with SAE support for WPA3, uses mbedTLS)
-# Inherits mbedtls settings from above (SSL_VARIANT=mbedtls)
+# This block applies to any variant named 'pqc' (whether mbedtls or openssl).
 ifeq ($(LOCAL_VARIANT),pqc)
   DRIVER_MAKEOPTS += CONFIG_PQC=y CONFIG_GCMP=y CONFIG_SUITEB192=y
   TARGET_LDFLAGS += -loqs
@@ -225,19 +222,6 @@ endef
 
 Package/hostapd-mbedtls/description = $(Package/hostapd/description)
 
-define Package/hostapd-pqc
-  $(call Package/hostapd/Default,$(1))
-  TITLE+= (mbedTLS WPA3-SAE and PQC)
-  VARIANT:=pqc-mbedtls
-  DEPENDS+=liboqs +PACKAGE_hostapd-pqc:libmbedtls
-endef
-
-define Package/hostapd-pqc/description
- This package contains a IEEE 802.1x/WPA Authenticator with WPA3-SAE support,
- plus Post-Quantum Cryptography support using liboqs library for quantum-resistant algorithms like Kyber768.
- Uses mbedTLS for TLS/crypto operations (same library as hostapd-mbedtls).
- PQC is integrated with WPA3-SAE authentication process.
-endef
 
 define Package/hostapd-basic
 $(call Package/hostapd/Default,$(1))
@@ -328,6 +312,19 @@ $(call Package/wpad/Default,$(1))
 endef
 
 Package/wpad-openssl/description = $(Package/wpad/description)
+
+define Package/wpad-pqc-openssl
+$(call Package/wpad/Default,$(1))
+  TITLE+= (OpenSSL WPA3-SAE and PQC)
+  VARIANT:=wpad-pqc-openssl
+  DEPENDS+=$(OPENSSL_DEPENDS) +liboqs
+endef
+
+define Package/wpad-pqc-openssl/description
+ This package contains a full featured IEEE 802.1x/WPA/EAP/RADIUS Authenticator and Supplicant.
+ Included WPA3-SAE support and Post-Quantum Cryptography support using liboqs.
+ Uses OpenSSL for TLS/crypto operations, supporting Suite B (GCMP-256).
+endef
 
 define Package/wpad-wolfssl
 $(call Package/wpad/Default,$(1))
@@ -748,11 +745,11 @@ Package/wpad-mesh-wolfssl/conffiles = $(Package/hostapd-full/conffiles)
 Package/wpad-mesh-mbedtls/conffiles = $(Package/hostapd-full/conffiles)
 Package/wpad/conffiles = $(Package/hostapd-full/conffiles)
 Package/wpad-openssl/conffiles = $(Package/hostapd-full/conffiles)
+Package/wpad-pqc-openssl/conffiles = $(Package/hostapd-full/conffiles)
 Package/wpad-wolfssl/conffiles = $(Package/hostapd-full/conffiles)
 Package/wpad-mbedtls/conffiles = $(Package/hostapd-full/conffiles)
 Package/hostapd/conffiles = $(Package/hostapd-full/conffiles)
 Package/hostapd-openssl/conffiles = $(Package/hostapd-full/conffiles)
-Package/hostapd-pqc/conffiles = $(Package/hostapd-full/conffiles)
 Package/hostapd-wolfssl/conffiles = $(Package/hostapd-full/conffiles)
 Package/hostapd-mbedtls/conffiles = $(Package/hostapd-full/conffiles)
 endif
@@ -791,7 +788,6 @@ Package/hostapd-basic-wolfssl/install = $(Package/hostapd/install)
 Package/hostapd-basic-mbedtls/install = $(Package/hostapd/install)
 Package/hostapd-mini/install = $(Package/hostapd/install)
 Package/hostapd-openssl/install = $(Package/hostapd/install)
-Package/hostapd-pqc/install = $(Package/hostapd/install)
 Package/hostapd-wolfssl/install = $(Package/hostapd/install)
 Package/hostapd-mbedtls/install = $(Package/hostapd/install)
 
@@ -815,6 +811,7 @@ Package/wpad-basic-wolfssl/install = $(Package/wpad/install)
 Package/wpad-basic-mbedtls/install = $(Package/wpad/install)
 Package/wpad-mini/install = $(Package/wpad/install)
 Package/wpad-openssl/install = $(Package/wpad/install)
+Package/wpad-pqc-openssl/install = $(Package/wpad/install)
 Package/wpad-wolfssl/install = $(Package/wpad/install)
 Package/wpad-mbedtls/install = $(Package/wpad/install)
 Package/wpad-mesh-openssl/install = $(Package/wpad/install)
@@ -880,7 +877,6 @@ $(eval $(call BuildPackage,hostapd-basic-wolfssl))
 $(eval $(call BuildPackage,hostapd-basic-mbedtls))
 $(eval $(call BuildPackage,hostapd-mini))
 $(eval $(call BuildPackage,hostapd-openssl))
-$(eval $(call BuildPackage,hostapd-pqc))
 $(eval $(call BuildPackage,hostapd-wolfssl))
 $(eval $(call BuildPackage,hostapd-mbedtls))
 $(eval $(call BuildPackage,wpad))
@@ -893,6 +889,7 @@ $(eval $(call BuildPackage,wpad-basic-wolfssl))
 $(eval $(call BuildPackage,wpad-basic-mbedtls))
 $(eval $(call BuildPackage,wpad-mini))
 $(eval $(call BuildPackage,wpad-openssl))
+$(eval $(call BuildPackage,wpad-pqc-openssl))
 $(eval $(call BuildPackage,wpad-wolfssl))
 $(eval $(call BuildPackage,wpad-mbedtls))
 $(eval $(call BuildPackage,wpa-supplicant))
