@@ -50,12 +50,12 @@ LOCAL_AND_LIB_VARIANT=$(patsubst hostapd-%,%,\
 		      $(patsubst supplicant-%,%,\
 		      $(BUILD_VARIANT)\
 		      )))
-
+# pqc-openssl 처리 추가
 LOCAL_VARIANT=$(patsubst %-internal,%,\
 	      $(patsubst %-openssl,%,\
 	      $(patsubst %-wolfssl,%,\
 	      $(patsubst %-mbedtls,%,\
-	      $(patsubst %-pqc-openssl,pqc,\
+	      $(patsubst %-pqc-openssl,%,\
 	      $(LOCAL_AND_LIB_VARIANT)\
 	      )))))
 
@@ -121,7 +121,8 @@ ifeq ($(SSL_VARIANT),openssl)
     DRIVER_MAKEOPTS += CONFIG_OWE=y CONFIG_SUITEB192=y CONFIG_AP=y CONFIG_MESH=y CONFIG_EAP_PWD=y CONFIG_DPP=y CONFIG_DPP2=y
   endif
 	ifeq ($(LOCAL_VARIANT),pqc)
-    DRIVER_MAKEOPTS += CONFIG_SUITEB192=y CONFIG_AP=y CONFIG_IEEE80211W=y
+    DRIVER_MAKEOPTS += CONFIG_SUITEB192=y CONFIG_AP=y CONFIG_IEEE80211W=y CONFIG_PQC=y CONFIG_GCMP=y
+		TARGET_LDFLAGS += -loqs
   endif
 endif
 
@@ -155,11 +156,6 @@ ifeq ($(SSL_VARIANT),mbedtls)
   endif
 endif
 
-# This block applies to any variant named 'pqc' (whether mbedtls or openssl).
-ifeq ($(LOCAL_VARIANT),pqc)
-  DRIVER_MAKEOPTS += CONFIG_PQC=y CONFIG_GCMP=y CONFIG_SUITEB192=y
-  TARGET_LDFLAGS += -loqs
-endif
 
 ifneq ($(LOCAL_TYPE),hostapd)
   ifdef CONFIG_WPA_RFKILL_SUPPORT
@@ -313,6 +309,7 @@ endef
 
 Package/wpad-openssl/description = $(Package/wpad/description)
 
+# openssl 기반 PQC 지원 hostapd/wpa_supplicant 패키지 추가
 define Package/wpad-pqc-openssl
 $(call Package/wpad/Default,$(1))
   TITLE+= (OpenSSL WPA3-SAE and PQC)
