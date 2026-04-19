@@ -16,13 +16,20 @@ if [ "$1" == "full" ]; then
     echo "   (This may take time, but ensures ubus.h exists)"
     echo "----------------------------------------------------"
     
+    make dirclean
+    
+    make download
+    
     make -j$CORES
+
     
     if [ $? -ne 0 ]; then
         echo "❌ Full build failed! Aborting."
         exit 1
     fi
     echo "✅ Full build completed successfully."
+    echo "🎉 Script exiting early as full build was requested and succeeded."
+    exit 0
 else
     echo "⏩ Skipping full build. (Run './build.sh full' if dependencies are missing)"
 fi
@@ -45,3 +52,4 @@ else
     echo "----------------------------------------------------"
     exit 1
 fi
+
