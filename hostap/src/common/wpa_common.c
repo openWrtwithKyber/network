@@ -3770,7 +3770,7 @@ if (left >= 2 && (selector == RSN_KEY_DATA_PQC_512_KEY ||
     
     /* Skip empty fragments */
     if (data_len == 0) {
-        wpa_printf(MSG_DEBUG, "PQC: Empty fragment, ignoring");
+        wpa_printf(MSG_INFO, "PQC: Empty fragment, ignoring");
         return 0;
     }
     
@@ -3798,9 +3798,9 @@ if (left >= 2 && (selector == RSN_KEY_DATA_PQC_512_KEY ||
             ie->kyber_pubkey_len += data_len;
             ie->kyber_pk_next_seq++;
         } else if (!ie->kyber_pubkey) {
-            wpa_printf(MSG_DEBUG, "PQC: PubKey buffer not initialized");
+            wpa_printf(MSG_INFO, "PQC: PubKey buffer not initialized");
         } else if (seq != ie->kyber_pk_next_seq) {
-            wpa_printf(MSG_DEBUG,
+            wpa_printf(MSG_INFO,
                        "PQC: Out-of-order PubKey (exp=%u, got=%u)",
                        ie->kyber_pk_next_seq, seq);
         } else {
@@ -3830,9 +3830,9 @@ if (left >= 2 && (selector == RSN_KEY_DATA_PQC_512_KEY ||
             ie->kyber_ciphertext_len += data_len;
             ie->kyber_ct_next_seq++;
         } else if (!ie->kyber_ciphertext) {
-            wpa_printf(MSG_DEBUG, "PQC: CT buffer not initialized");
+            wpa_printf(MSG_INFO, "PQC: CT buffer not initialized");
         } else if (seq != ie->kyber_ct_next_seq) {
-            wpa_printf(MSG_DEBUG,
+            wpa_printf(MSG_INFO,
                        "PQC: Out-of-order CT (exp=%u, got=%u)",
                        ie->kyber_ct_next_seq, seq);
         } else {

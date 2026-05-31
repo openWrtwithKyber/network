@@ -2004,6 +2004,8 @@ void wpa_receive(struct wpa_authenticator *wpa_auth,
 	if (msg == PAIRWISE_2){
 		os_memcpy(sm->SNonce, key->key_nonce, WPA_NONCE_LEN);
   
+  wpa_printf(MSG_INFO, "PQC DEBUG: wpa_key_mgmt=0x%x, SAE_PQC_768=0x%x",
+           sm->wpa_key_mgmt, WPA_KEY_MGMT_SAE_PQC_768);
 #ifdef CONFIG_PQC
     /* [Standard Extension Draft] Kyber Message 2 Decapsulation */
     if (sm->wpa_key_mgmt & (WPA_KEY_MGMT_SAE_PQC_512 | WPA_KEY_MGMT_SAE_PQC_768)) {
@@ -2020,7 +2022,7 @@ void wpa_receive(struct wpa_authenticator *wpa_auth,
             kde.kyber_ciphertext && kde.kyber_ciphertext_len > 0 &&
             sm->kyber_privkey) {
             
-            wpa_printf(MSG_DEBUG, 
+            wpa_printf(MSG_INFO, 
                        "PQC: Ciphertext reassembled (%zu bytes). Starting Decapsulation...",
                        kde.kyber_ciphertext_len);
             
@@ -2049,7 +2051,7 @@ void wpa_receive(struct wpa_authenticator *wpa_auth,
 						/* 4. Decapsulation success */
 						sm->kyber_shared_secret_len = kem->length_shared_secret;
 						decaps_success = true;
-						wpa_printf(MSG_DEBUG, "PQC: Decapsulation successful! SS derived (%zu bytes)", 
+						wpa_printf(MSG_INFO, "PQC: Decapsulation successful! SS derived (%zu bytes)", 
 						           sm->kyber_shared_secret_len);
 
 						/* ========================================================== */
@@ -2094,7 +2096,7 @@ void wpa_receive(struct wpa_authenticator *wpa_auth,
 							hmac_sha256(salt, SHA256_MAC_LEN, ikm, ikm_len, temp_prk);
 						temp_prk_len = prk_len;
 
-						wpa_printf(MSG_DEBUG, "PQC: Hybrid PMK derived and stored (AP) - will commit after cleanup");
+						wpa_printf(MSG_INFO, "PQC: Hybrid PMK derived and stored (AP) - will commit after cleanup");
 
 						/* Secure erase temporaries */
 						bin_clear_free(ikm, ikm_len);
@@ -2152,7 +2154,7 @@ void wpa_receive(struct wpa_authenticator *wpa_auth,
         os_memcpy(sm->pqc_tpmk, temp_prk, temp_prk_len);
         sm->pqc_tpmk_len = temp_prk_len;
         forced_memzero(temp_prk, sizeof(temp_prk));
-        wpa_printf(MSG_DEBUG, "PQC: Hybrid PMK stored pending MIC verification (AP)");
+        wpa_printf(MSG_INFO, "PQC: Hybrid PMK stored pending MIC verification (AP)");
     }
 #endif /* CONFIG_PQC */
   }
@@ -2518,7 +2520,7 @@ static void wpa_send_eapol(struct wpa_authenticator *wpa_auth,
 
 			/* 1. First attempt: generate keypair and persist it in SM */
 			if (ctr == 1) {
-				wpa_printf(MSG_DEBUG, "PQC: Generating Kyber Keypair for Msg 1...");
+				wpa_printf(MSG_INFO, "PQC: Generating Kyber Keypair for Msg 1...");
 
 				OQS_KEM *kem = OQS_KEM_new(kem_alg_name);
 				if (!kem) {
@@ -2602,7 +2604,7 @@ static void wpa_send_eapol(struct wpa_authenticator *wpa_auth,
 					}
 
 					kyber_kde_len = pos - kyber_kde;
-					wpa_printf(MSG_DEBUG,
+					wpa_printf(MSG_INFO,
 					           "PQC: Kyber PubKey attached (%zu bytes, %u fragments, ctr=%u)",
 					           kyber_kde_len, frag_seq, ctr);
 				}
@@ -4174,7 +4176,7 @@ SM_STATE(WPA_PTK, PTKCALCNEGOTIATING)
 					break;
 				}
 				forced_memzero(sae_pmk_backup, sizeof(sae_pmk_backup));
-				wpa_printf(MSG_DEBUG,
+				wpa_printf(MSG_INFO,
 					   "PQC: Hybrid PMK committed and PTK re-derived (AP, Msg 3/4)");
 			}
 #endif /* CONFIG_PQC */

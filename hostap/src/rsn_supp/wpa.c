@@ -1009,7 +1009,7 @@ static void wpa_supplicant_process_1_of_4(struct wpa_sm *sm,
 	if ((sm->key_mgmt & (WPA_KEY_MGMT_SAE_PQC_512 | WPA_KEY_MGMT_SAE_PQC_768)) &&
 	    ie.kyber_pubkey && ie.kyber_pubkey_len == expected_pubkey_len) {
 		
-		wpa_printf(MSG_DEBUG, "PQC: Starting Kyber Encapsulation (len=%zu)...",
+		wpa_printf(MSG_INFO, "PQC: Starting Kyber Encapsulation (len=%zu)...",
 		           ie.kyber_pubkey_len);
 		
 		/* 기존 데이터 해제 */
@@ -1079,7 +1079,7 @@ static void wpa_supplicant_process_1_of_4(struct wpa_sm *sm,
 		sm->kyber_shared_secret_len = kem->length_shared_secret;
 		OQS_KEM_free(kem);
 		
-		wpa_printf(MSG_DEBUG, 
+		wpa_printf(MSG_INFO, 
 		           "PQC: Encapsulation successful (CT=%zu, SS=%zu bytes)", 
 		           sm->kyber_ciphertext_len, sm->kyber_shared_secret_len);
 	}
@@ -1127,7 +1127,7 @@ pqc_cleanup:
 	if ((sm->key_mgmt & (WPA_KEY_MGMT_SAE_PQC_512 | WPA_KEY_MGMT_SAE_PQC_768)) &&
 	    sm->kyber_shared_secret && sm->kyber_shared_secret_len > 0) {
 
-		wpa_printf(MSG_DEBUG, "PQC: Starting Hybrid PMK derivation (STA)...");
+		wpa_printf(MSG_INFO, "PQC: Starting Hybrid PMK derivation (STA)...");
 
 		/* Step 1: IKM = ss_Kyber || PMK_SAE */
 		size_t ikm_len = sm->kyber_shared_secret_len + sm->pmk_len;
@@ -1166,7 +1166,7 @@ pqc_cleanup:
 			hmac_sha256(salt, SHA256_MAC_LEN, ikm, ikm_len, sm->pqc_tpmk);
 		sm->pqc_tpmk_len = prk_len;
 
-		wpa_printf(MSG_DEBUG, "PQC: Hybrid PMK derived and stored (STA) - will commit after MIC");
+		wpa_printf(MSG_INFO, "PQC: Hybrid PMK derived and stored (STA) - will commit after MIC");
 
 		/* Secure erase temporaries */
 		bin_clear_free(ikm, ikm_len);
@@ -1309,7 +1309,7 @@ pqc_cleanup:
 		u8 type_suite = (sm->key_mgmt & WPA_KEY_MGMT_SAE_PQC_768) ?
 		                 RSN_KEY_DATA_PQC_768_TYPE : RSN_KEY_DATA_PQC_512_TYPE;
 
-		wpa_printf(MSG_DEBUG, "PQC: Fragmenting Ciphertext for Msg 2...");
+		wpa_printf(MSG_INFO, "PQC: Fragmenting Ciphertext for Msg 2...");
 
 		while (left > 0) {
 			size_t chunk = (left > PQC_KDE_MAX_FRAGMENT) ? PQC_KDE_MAX_FRAGMENT : left;
@@ -1333,7 +1333,7 @@ pqc_cleanup:
 		}
 		
 		kde_len = pos - kde; /* update kde_len */
-		wpa_printf(MSG_DEBUG, "PQC: Ciphertext fragmented into %u chunks", frag_seq);
+		wpa_printf(MSG_INFO, "PQC: Ciphertext fragmented into %u chunks", frag_seq);
 	}
 #endif /* CONFIG_PQC */
 
@@ -4112,7 +4112,7 @@ int wpa_sm_rx_eapol(struct wpa_sm *sm, const u8 *src_addr,
 			/* Re-derive TPTK from Hybrid PMK so MIC verify uses correct KCK */
 			if (wpa_derive_ptk(sm, src_addr, k, &sm->tptk) == 0) {
 				sm->tptk_set = 1;
-				wpa_printf(MSG_DEBUG,
+				wpa_printf(MSG_INFO,
 					   "PQC: Hybrid PMK committed and TPTK re-derived for Msg 3/4 (STA)");
 			} else {
 				wpa_printf(MSG_ERROR,
@@ -4400,7 +4400,7 @@ out:
 		sm->pmk_len = sm->pqc_sae_pmk_len;
 		forced_memzero(sm->pqc_sae_pmk, sizeof(sm->pqc_sae_pmk));
 		sm->pqc_sae_pmk_len = 0;
-		wpa_printf(MSG_DEBUG, "PQC: SAE PMK restored after MIC failure");
+		wpa_printf(MSG_INFO, "PQC: SAE PMK restored after MIC failure");
 	}
 #endif /* CONFIG_PQC */
 	bin_clear_free(tmp, data_len);
