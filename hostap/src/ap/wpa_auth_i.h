@@ -10,6 +10,9 @@
 #define WPA_AUTH_I_H
 
 #include "utils/list.h"
+#ifdef CONFIG_PQC
+#include "crypto/sha384.h"
+#endif /* CONFIG_PQC */
 
 /* max(dot11RSNAConfigGroupUpdateCount,dot11RSNAConfigPairwiseUpdateCount) */
 #define RSNA_MAX_EAPOL_RETRIES 4
@@ -190,6 +193,18 @@ struct wpa_state_machine {
 		struct wpa_authenticator *wpa_auth;
 	} mld_links[MAX_NUM_MLD_LINKS];
 #endif /* CONFIG_IEEE80211BE */
+
+/* [Standard Extension Draft] PQC Private Key Storage */
+#ifdef CONFIG_PQC
+    u8 *kyber_privkey;
+    size_t kyber_privkey_len;
+    u8 *kyber_pubkey; /* Kept across Msg 1/4 retransmits so STA always gets same pubkey */
+    size_t kyber_pubkey_len;
+    u8 *kyber_shared_secret;
+    size_t kyber_shared_secret_len;
+    u8 pqc_tpmk[SHA384_MAC_LEN]; /* Pending Hybrid PMK, committed after MIC verify */
+    size_t pqc_tpmk_len;
+#endif /* CONFIG_PQC */
 
 	bool ssid_protection;
 };

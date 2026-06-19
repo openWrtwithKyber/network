@@ -1,0 +1,878 @@
+================================================================================
+WPA3 SAE (Simultaneous Authentication of Equals) 구현 문서
+hostapd의 WPA3 SAE 로직 분석
+================================================================================
+
+본 문서는 hostapd에서 구현된 WPA3 SAE 프로세스의 주요 로직을 설명합니다.
+
+================================================================================
+1. AP가 Beacon Frame에 자신의 정보를 담아서 보내는 로직
+================================================================================
+
+파일: hostap/src/ap/beacon.c
+
+1.1. Beacon Frame 구성 함수
+함수: ieee802_11_set_beacon()
+위치: beacon.c:2177-2550
+설명: Beacon frame을 구성하고 전송하는 메인 함수
+
+매개변수:
+- hapd: struct hostapd_data * - BSS 데이터 구조체
+
+주요 로직:
+1. Beacon frame의 헤더를 구성
+2. SSID, Supported Rates 등 기본 IE들을 추가
+3. RSNE (RSN Information Element)를 추가
+4. RSNXE (RSN Extension IE)를 추가 (WPA3 정보 포함)
+5. Extended Capabilities에 SAE 관련 정보 추가
+
+1.2. RSNE 추가 함수
+함수: hostapd_get_rsne()
+위치: beacon.c:348-358
+설명: Beacon frame에 RSNE를 추가하는 함수
+
+매개변수:
+- hapd: struct hostapd_data * - BSS 데이터 구조체
+- pos: u8 * - Beacon frame의 현재 위치 포인터
+- len: size_t - 남은 버퍼 길이
+
+반환값:
+- u8 * - 업데이트된 위치 포인터
+
+상수:
+- WLAN_EID_RSN: RSN Information Element ID (48)
+
+주요 로직:
+```348:358:hostap/src/ap/beacon.c
+static u8 * hostapd_get_rsne(struct hostapd_data *hapd, u8 *pos, size_t len)
+{
+	const u8 *ie;
+
+	ie = hostapd_wpa_ie(hapd, WLAN_EID_RSN);
+	if (!ie || 2U + ie[1] > len)
+		return pos;
+
+	os_memcpy(pos, ie, 2 + ie[1]);
+	return pos + 2 + ie[1];
+}
+```
+
+1.3. RSNE 생성 함수
+함수: wpa_auth_get_wpa_ie()
+위치: wpa_auth.c:6487-6493
+설명: WPA/RSN IE를 생성하여 반환하는 함수
+
+매개변수:
+- wpa_auth: struct wpa_authenticator * - WPA 인증 구조체
+- len: size_t * - IE 길이를 저장할 포인터
+
+반환값:
+- const u8 * - 생성된 WPA/RSN IE 포인터
+
+주요 로직:
+```6487:6493:hostap/src/ap/wpa_auth.c
+const u8 * wpa_auth_get_wpa_ie(struct wpa_authenticator *wpa_auth, size_t *len)
+{
+	if (!wpa_auth)
+		return NULL;
+	*len = wpa_auth->wpa_ie_len;
+	return wpa_auth->wpa_ie;
+}
+```
+
+1.4. RSNE 작성 함수
+함수: wpa_write_rsn_ie()
+위치: wpa_auth_ie.c:393-414
+설명: RSN IE를 작성하는 함수
+
+매개변수:
+- conf: struct wpa_auth_config * - WPA 인증 설정 구조체
+- buf: u8 * - IE를 작성할 버퍼
+- len: size_t - 버퍼 길이
+- pmkid: const u8 * - PMKID (선택적)
+
+반환값:
+- int - 작성된 IE의 길이, 실패 시 -1
+
+상수:
+- WLAN_EID_RSN: RSN IE Element ID (48)
+- RSN_VERSION: RSN 버전 (1)
+
+주요 로직:
+```393:414:hostap/src/ap/wpa_auth_ie.c
+int wpa_write_rsn_ie(struct wpa_auth_config *conf, u8 *buf, size_t len,
+		     const u8 *pmkid)
+{
+	struct rsn_ie_hdr *hdr;
+	u8 *pos;
+
+	hdr = (struct rsn_ie_hdr *) buf;
+	hdr->elem_id = WLAN_EID_RSN;
+	WPA_PUT_LE16(hdr->version, RSN_VERSION);
+	pos = (u8 *) (hdr + 1);
+
+	pos = rsne_write_data(buf, len, pos, conf->wpa_group,
+			      conf->rsn_pairwise, conf->wpa_key_mgmt,
+			      wpa_own_rsn_capab(conf, conf->ieee80211w), pmkid,
+			      conf->ieee80211w, conf->group_mgmt_cipher);
+	if (!pos)
+		return -1;
+
+	hdr->len = (pos - buf) - 2;
+
+	return pos - buf;
+}
+```
+
+1.5. RSNXE 추가 함수
+함수: hostapd_get_rsnxe()
+위치: beacon.c:374-390
+설명: Beacon frame에 RSNXE를 추가하는 함수 (WPA3 확장 정보 포함)
+
+매개변수:
+- hapd: struct hostapd_data * - BSS 데이터 구조체
+- pos: u8 * - Beacon frame의 현재 위치 포인터
+- len: size_t - 남은 버퍼 길이
+
+반환값:
+- u8 * - 업데이트된 위치 포인터
+
+주요 로직:
+```374:390:hostap/src/ap/beacon.c
+static u8 * hostapd_get_rsnxe(struct hostapd_data *hapd, u8 *pos, size_t len)
+{
+	const u8 *ie;
+
+#ifdef CONFIG_TESTING_OPTIONS
+	if (hapd->conf->no_beacon_rsnxe) {
+		wpa_printf(MSG_INFO, "TESTING: Do not add RSNXE into Beacon");
+		return pos;
+	}
+#endif /* CONFIG_TESTING_OPTIONS */
+	ie = hostapd_wpa_ie(hapd, WLAN_EID_RSNX);
+	if (!ie || 2U + ie[1] > len)
+		return pos;
+
+	os_memcpy(pos, ie, 2 + ie[1]);
+	return pos + 2 + ie[1];
+}
+```
+
+1.6. Extended Capabilities에 SAE 정보 추가
+위치: ieee802_11_shared.c:452-464
+설명: Extended Capabilities IE에 SAE Password Identifier 사용 정보를 추가
+
+상수:
+- BIT(81): SAE Password Identifiers In Use
+- BIT(82): SAE Password Identifiers Used Exclusively
+
+주요 로직:
+```452:464:hostap/src/ap/ieee802_11_shared.c
+	case 10: /* Bits 80-87 */
+#ifdef CONFIG_SAE
+		if (hapd->conf->wpa &&
+		    wpa_key_mgmt_sae(hapd->conf->wpa_key_mgmt)) {
+			int in_use = hostapd_sae_pw_id_in_use(hapd->conf);
+
+			if (in_use)
+				*pos |= 0x02; /* Bit 81 - SAE Password
+					       * Identifiers In Use */
+			if (in_use == 2)
+				*pos |= 0x04; /* Bit 82 - SAE Password
+					       * Identifiers Used Exclusively */
+		}
+#endif /* CONFIG_SAE */
+```
+
+================================================================================
+2. STA이 WPA3로 연결하려고 할 때 트리거되는 로직
+================================================================================
+
+파일: hostap/src/ap/ieee802_11.c
+
+2.1. Authentication Frame 처리 함수
+함수: handle_auth()
+위치: ieee802_11.c:약 2700번째 줄 근처
+설명: STA으로부터 받은 Authentication frame을 처리하는 메인 함수
+
+주요 로직:
+1. Authentication frame의 auth_alg 필드를 확인
+2. auth_alg가 WLAN_AUTH_SAE인 경우 handle_auth_sae() 호출
+
+2.2. SAE Authentication 처리 함수
+함수: handle_auth_sae()
+위치: ieee802_11.c:1547-1926
+설명: SAE Authentication frame을 처리하는 함수
+
+매개변수:
+- hapd: struct hostapd_data * - BSS 데이터 구조체
+- sta: struct sta_info * - STA 정보 구조체
+- mgmt: const struct ieee80211_mgmt * - 수신한 Management frame
+- len: size_t - Frame 길이
+- auth_transaction: u16 - Authentication transaction 번호
+- status_code: u16 - Status code
+
+상수:
+- WLAN_AUTH_SAE: SAE Authentication Algorithm (3)
+- WLAN_STATUS_SUCCESS: 성공 상태 코드 (0)
+- WLAN_STATUS_SAE_HASH_TO_ELEMENT: Hash-to-Element 상태 코드 (76)
+- WLAN_STATUS_ANTI_CLOGGING_TOKEN_REQ: Anti-clogging Token 요청 (77)
+- SAE_NOTHING: SAE 상태 - 초기 상태
+- SAE_COMMITTED: SAE 상태 - Commit 메시지 전송/수신 상태
+- SAE_CONFIRMED: SAE 상태 - Confirm 메시지 수신 상태
+- SAE_ACCEPTED: SAE 상태 - SAE 인증 완료 상태
+
+주요 로직:
+```1547:1615:hostap/src/ap/ieee802_11.c
+static void handle_auth_sae(struct hostapd_data *hapd, struct sta_info *sta,
+                            const struct ieee80211_mgmt *mgmt, size_t len,
+                            u16 auth_transaction, u16 status_code)
+{
+  int resp = WLAN_STATUS_SUCCESS;
+  struct wpabuf *data = NULL;
+  // ... 생략 ...
+  if (!sta->sae)
+  {
+    if (auth_transaction != 1 ||
+        !sae_status_success(hapd, status_code))
+    {
+      wpa_printf(MSG_DEBUG, "SAE: Unexpected Status Code %u",
+                 status_code);
+      resp = WLAN_STATUS_UNSPECIFIED_FAILURE;
+      goto reply;
+    }
+    sta->sae = os_zalloc(sizeof(*sta->sae));
+    if (!sta->sae)
+    {
+      resp = -1;
+      goto remove_sta;
+    }
+    if (!hostapd_sae_pw_id_in_use(hapd->conf))
+      sta->sae->no_pw_id = 1;
+    sae_set_state(sta, SAE_NOTHING, "Init");
+    sta->sae->sync = 0;
+  }
+```
+
+2.3. SAE 상태 머신 단계 처리
+함수: sae_sm_step()
+위치: ieee802_11.c 또는 sae.c
+설명: SAE 상태 머신의 한 단계를 처리하는 함수
+
+매개변수:
+- hapd: struct hostapd_data * - BSS 데이터 구조체
+- sta: struct sta_info * - STA 정보 구조체
+- auth_transaction: u16 - Authentication transaction 번호
+- status_code: u16 - Status code
+- allow_reuse: int - 재사용 허용 여부
+- sta_removed: int * - STA 제거 여부를 저장할 포인터
+
+반환값:
+- int - 응답 상태 코드
+
+================================================================================
+3. WPA3의 Association 과정과 Auth 과정이 시작되는 로직
+================================================================================
+
+파일: hostap/src/ap/ieee802_11.c
+
+3.1. Association Request 처리 함수
+함수: handle_assoc()
+위치: ieee802_11.c:6011-6600 (약)
+설명: Association Request frame을 처리하는 메인 함수
+
+매개변수:
+- hapd: struct hostapd_data * - BSS 데이터 구조체
+- mgmt: const struct ieee80211_mgmt * - Management frame
+- len: size_t - Frame 길이
+- reassoc: int - Reassociation 여부 (0: Association, 1: Reassociation)
+- rssi: int - 수신 신호 강도
+
+주요 로직:
+```6011:6150:hostap/src/ap/ieee802_11.c
+static void handle_assoc(struct hostapd_data *hapd,
+                         const struct ieee80211_mgmt *mgmt, size_t len,
+                         int reassoc, int rssi)
+{
+  u16 capab_info, listen_interval, seq_ctrl, fc;
+  int resp = WLAN_STATUS_SUCCESS;
+  // ... 생략 ...
+  sta = ap_get_sta(hapd, mgmt->sa);
+
+  // ... 생략 ...
+    if (sta == NULL || (sta->flags & WLAN_STA_AUTH) == 0)
+    {
+      // 인증되지 않은 STA은 Association을 거부
+      resp = WLAN_STATUS_UNSPECIFIED_FAILURE;
+      goto fail;
+    }
+```
+
+3.2. SAE Authentication 시작 함수
+함수: auth_sae_init_committed()
+위치: ieee802_11.c:1938-1957
+설명: SAE Authentication을 시작하여 Commit 메시지를 전송하는 함수
+
+매개변수:
+- hapd: struct hostapd_data * - BSS 데이터 구조체
+- sta: struct sta_info * - STA 정보 구조체
+
+반환값:
+- int - 성공 시 0, 실패 시 -1
+
+주요 로직:
+```1938:1957:hostap/src/ap/ieee802_11.c
+int auth_sae_init_committed(struct hostapd_data *hapd, struct sta_info *sta)
+{
+  int ret;
+
+  if (!sta->sae || !sta->sae->tmp)
+    return -1;
+
+  if (sta->sae->state != SAE_NOTHING)
+    return -1;
+
+  ret = auth_sae_send_commit(hapd, sta, 0, -1);
+  if (ret)
+    return -1;
+
+  sae_set_state(sta, SAE_COMMITTED, "Init and sent commit");
+  sta->sae->sync = 0;
+  sae_set_retransmit_timer(hapd, sta);
+
+  return 0;
+}
+```
+
+3.3. SAE Commit 메시지 전송 함수
+함수: auth_sae_send_commit()
+위치: ieee802_11.c
+설명: SAE Commit 메시지를 전송하는 함수
+
+매개변수:
+- hapd: struct hostapd_data * - BSS 데이터 구조체
+- sta: struct sta_info * - STA 정보 구조체
+- send_confirm: int - Confirm 메시지 전송 여부
+- status_code: int - Status code
+
+반환값:
+- int - 응답 상태 코드
+
+3.4. SAE 상태에 따른 처리
+함수: handle_auth_sae() 내부의 auth_transaction별 처리
+위치: ieee802_11.c:1625-1892
+
+auth_transaction == 1 (Commit 메시지):
+- STA으로부터 Commit 메시지를 수신
+- SAE 인증을 시작하고 응답 Commit 메시지 전송
+- sae_sm_step() 호출하여 SAE 상태 머신 진행
+
+auth_transaction == 2 (Confirm 메시지):
+- STA으로부터 Confirm 메시지를 수신
+- sae_check_confirm() 호출하여 Confirm 메시지 검증
+- SAE 인증 완료 후 Association 허용
+
+주요 로직:
+```1625:1690:hostap/src/ap/ieee802_11.c
+  if (auth_transaction == 1)
+  {
+    const u8 *token = NULL;
+    size_t token_len = 0;
+    int allow_reuse = 0;
+
+    hostapd_logger(hapd, sta->addr, HOSTAPD_MODULE_IEEE80211,
+                   HOSTAPD_LEVEL_DEBUG,
+                   "start SAE authentication (RX commit, status=%u (%s))",
+                   status_code, status2str(status_code));
+    // ... 생략 ...
+    resp = sae_sm_step(hapd, sta, auth_transaction,
+                       status_code, allow_reuse, &sta_removed);
+  }
+  else if (auth_transaction == 2)
+  {
+    hostapd_logger(hapd, sta->addr, HOSTAPD_MODULE_IEEE80211,
+                   HOSTAPD_LEVEL_DEBUG,
+                   "SAE authentication (RX confirm, status=%u (%s))",
+                   status_code, status2str(status_code));
+    if (status_code != WLAN_STATUS_SUCCESS)
+      goto remove_sta;
+    // ... Confirm 메시지 검증 ...
+    resp = sae_sm_step(hapd, sta, auth_transaction,
+                       status_code, 0, &sta_removed);
+  }
+```
+
+3.5. Association 완료 후 처리
+함수: hostapd.c의 association 완료 처리
+위치: hostapd.c:4184
+설명: Association이 완료된 후 WPA 인증을 시작하는 함수
+
+주요 로직:
+```4184:4184:hostap/src/ap/hostapd.c
+		wpa_auth_sta_associated(hapd->wpa_auth, sta->wpa_sm);
+```
+
+================================================================================
+4. Auth 과정에서 키 연산을 호출하는 로직
+================================================================================
+
+파일: hostap/src/common/sae.c
+
+4.1. SAE Commit 처리 함수 (키 연산 시작점)
+함수: sae_process_commit()
+위치: sae.c:1670-1684
+설명: SAE Commit 메시지를 처리하고 키를 도출하는 함수
+
+매개변수:
+- sae: struct sae_data * - SAE 데이터 구조체
+
+반환값:
+- int - 성공 시 0, 실패 시 -1
+
+주요 로직:
+```1670:1684:hostap/src/common/sae.c
+int sae_process_commit(struct sae_data *sae)
+{
+	u8 k[SAE_MAX_PRIME_LEN];
+	int ret = 0;
+
+	if (sae->tmp == NULL ||
+	    (sae->tmp->ec && sae_derive_k_ecc(sae, k) < 0) ||
+	    (sae->tmp->dh && sae_derive_k_ffc(sae, k) < 0) ||
+	    sae_derive_keys(sae, k) < 0)
+		ret = -1;
+
+	forced_memzero(k, SAE_MAX_PRIME_LEN);
+
+	return ret;
+}
+```
+
+상수:
+- SAE_MAX_PRIME_LEN: 최대 Prime 길이 (512)
+
+4.2. ECC 기반 키 도출 함수
+함수: sae_derive_k_ecc()
+위치: sae.c:1433-1466
+설명: ECC (Elliptic Curve Cryptography) 기반으로 k 값을 도출하는 함수
+
+매개변수:
+- sae: struct sae_data * - SAE 데이터 구조체
+- k: u8 * - 도출된 k 값을 저장할 버퍼
+
+반환값:
+- int - 성공 시 0, 실패 시 -1
+
+주요 로직:
+```1433:1466:hostap/src/common/sae.c
+static int sae_derive_k_ecc(struct sae_data *sae, u8 *k)
+{
+	struct crypto_ec_point *K;
+	int ret = -1;
+
+	K = crypto_ec_point_init(sae->tmp->ec);
+	if (K == NULL)
+		goto fail;
+
+	/*
+	 * K = scalar-op(rand, (elem-op(scalar-op(peer-commit-scalar, PWE),
+	 *                                        PEER-COMMIT-ELEMENT)))
+	 * If K is identity element (point-at-infinity), reject
+	 * k = F(K) (= x coordinate)
+	 */
+
+	if (crypto_ec_point_mul(sae->tmp->ec, sae->tmp->pwe_ecc,
+				sae->peer_commit_scalar, K) < 0 ||
+	    crypto_ec_point_add(sae->tmp->ec, K,
+				sae->tmp->peer_commit_element_ecc, K) < 0 ||
+	    crypto_ec_point_mul(sae->tmp->ec, K, sae->tmp->sae_rand, K) < 0 ||
+	    crypto_ec_point_is_at_infinity(sae->tmp->ec, K) ||
+	    crypto_ec_point_to_bin(sae->tmp->ec, K, k, NULL) < 0) {
+		wpa_printf(MSG_DEBUG, "SAE: Failed to calculate K and k");
+		goto fail;
+	}
+
+	wpa_hexdump_key(MSG_DEBUG, "SAE: k", k, sae->tmp->prime_len);
+
+	ret = 0;
+fail:
+	crypto_ec_point_deinit(K, 1);
+	return ret;
+}
+```
+
+4.3. FFC 기반 키 도출 함수
+함수: sae_derive_k_ffc()
+위치: sae.c:1469-1504
+설명: FFC (Finite Field Cryptography) 기반으로 k 값을 도출하는 함수
+
+매개변수:
+- sae: struct sae_data * - SAE 데이터 구조체
+- k: u8 * - 도출된 k 값을 저장할 버퍼
+
+반환값:
+- int - 성공 시 0, 실패 시 -1
+
+주요 로직:
+```1469:1504:hostap/src/common/sae.c
+static int sae_derive_k_ffc(struct sae_data *sae, u8 *k)
+{
+	struct crypto_bignum *K;
+	int ret = -1;
+
+	K = crypto_bignum_init();
+	if (K == NULL)
+		goto fail;
+
+	/*
+	 * K = scalar-op(rand, (elem-op(scalar-op(peer-commit-scalar, PWE),
+	 *                                        PEER-COMMIT-ELEMENT)))
+	 * If K is identity element (one), reject.
+	 * k = F(K) (= x coordinate)
+	 */
+
+	if (crypto_bignum_exptmod(sae->tmp->pwe_ffc, sae->peer_commit_scalar,
+				  sae->tmp->prime, K) < 0 ||
+	    crypto_bignum_mulmod(K, sae->tmp->peer_commit_element_ffc,
+				 sae->tmp->prime, K) < 0 ||
+	    crypto_bignum_exptmod(K, sae->tmp->sae_rand, sae->tmp->prime, K) < 0
+	    ||
+	    crypto_bignum_is_one(K) ||
+	    crypto_bignum_to_bin(K, k, SAE_MAX_PRIME_LEN, sae->tmp->prime_len) <
+	    0) {
+		wpa_printf(MSG_DEBUG, "SAE: Failed to calculate K and k");
+		goto fail;
+	}
+
+	wpa_hexdump_key(MSG_DEBUG, "SAE: k", k, sae->tmp->prime_len);
+
+	ret = 0;
+fail:
+	crypto_bignum_deinit(K, 1);
+	return ret;
+}
+```
+
+4.4. 키 도출 함수 (KCK, PMK, PMKID)
+함수: sae_derive_keys()
+위치: sae.c:1528-1667
+설명: k 값으로부터 KCK, PMK, PMKID를 도출하는 함수
+
+매개변수:
+- sae: struct sae_data * - SAE 데이터 구조체
+- k: const u8 * - 도출된 k 값
+
+반환값:
+- int - 성공 시 0, 실패 시 -1
+
+상수:
+- SAE_MAX_HASH_LEN: 최대 해시 길이 (64)
+- SAE_MAX_PRIME_LEN: 최대 Prime 길이 (512)
+- SAE_PMK_LEN: PMK 길이 (32)
+- SAE_PMK_LEN_MAX: 최대 PMK 길이 (64)
+- SAE_PMKID_LEN: PMKID 길이 (16)
+- SHA256_MAC_LEN: SHA256 MAC 길이 (32)
+
+주요 로직:
+```1528:1667:hostap/src/common/sae.c
+static int sae_derive_keys(struct sae_data *sae, const u8 *k)
+{
+	u8 zero[SAE_MAX_HASH_LEN], val[SAE_MAX_PRIME_LEN];
+	const u8 *salt;
+	struct wpabuf *rejected_groups = NULL;
+	u8 keyseed[SAE_MAX_HASH_LEN];
+	u8 keys[2 * SAE_MAX_HASH_LEN + SAE_PMK_LEN_MAX];
+	struct crypto_bignum *tmp;
+	int ret = -1;
+	size_t hash_len, salt_len, prime_len = sae->tmp->prime_len;
+	size_t pmk_len;
+	const u8 *addr[1];
+	size_t len[1];
+
+	tmp = crypto_bignum_init();
+	if (tmp == NULL)
+		goto fail;
+
+	/* keyseed = H(salt, k)
+	 * KCK || PMK = KDF-Hash-Length(keyseed, "SAE KCK and PMK",
+	 *                      (commit-scalar + peer-commit-scalar) modulo r)
+	 * PMKID = L((commit-scalar + peer-commit-scalar) modulo r, 0, 128)
+	 */
+
+	// ... 해시 길이 결정 ...
+	if (!sae->h2e)
+		hash_len = SHA256_MAC_LEN;
+	else if (sae->tmp->dh)
+		hash_len = sae_ffc_prime_len_2_hash_len(prime_len);
+	else
+		hash_len = sae_ecc_prime_len_2_hash_len(prime_len);
+
+	// ... salt 설정 (H2E의 경우 rejected groups 사용) ...
+	// ... keyseed 도출 (HKDF Extract) ...
+	if (hkdf_extract(hash_len, salt, salt_len, 1, addr, len, keyseed) < 0)
+		goto fail;
+
+	// ... (commit-scalar + peer-commit-scalar) mod r 계산 ...
+	if (crypto_bignum_add(sae->tmp->own_commit_scalar,
+			      sae->peer_commit_scalar, tmp) < 0 ||
+	    crypto_bignum_mod(tmp, sae->tmp->order, tmp) < 0)
+		goto fail;
+
+	// ... KCK, PMK 도출 (KDF) ...
+	if (sae_kdf_hash(hash_len, keyseed, "SAE KCK and PMK",
+			 val, sae->tmp->order_len,
+			 keys, hash_len + pmk_len) < 0)
+		goto fail;
+
+	// ... 키 저장 ...
+	os_memcpy(sae->tmp->kck, keys, hash_len);
+	sae->tmp->kck_len = hash_len;
+	os_memcpy(sae->pmk, keys + hash_len, pmk_len);
+	sae->pmk_len = pmk_len;
+	os_memcpy(sae->pmkid, val, SAE_PMKID_LEN);
+
+	ret = 0;
+fail:
+	wpabuf_free(rejected_groups);
+	crypto_bignum_deinit(tmp, 0);
+	return ret;
+}
+```
+
+4.5. KDF 해시 함수
+함수: sae_kdf_hash()
+위치: sae.c:1507-1525
+설명: SAE 키 도출을 위한 해시 함수 (PRF)
+
+매개변수:
+- hash_len: size_t - 해시 길이
+- k: const u8 * - 입력 키
+- label: const char * - 레이블 ("SAE KCK and PMK" 등)
+- context: const u8 * - 컨텍스트 데이터
+- context_len: size_t - 컨텍스트 데이터 길이
+- out: u8 * - 출력 버퍼
+- out_len: size_t - 출력 길이
+
+반환값:
+- int - 성공 시 0, 실패 시 -1
+
+주요 로직:
+```1507:1525:hostap/src/common/sae.c
+static int sae_kdf_hash(size_t hash_len, const u8 *k, const char *label,
+			const u8 *context, size_t context_len,
+			u8 *out, size_t out_len)
+{
+	if (hash_len == 32)
+		return sha256_prf(k, hash_len, label,
+				  context, context_len, out, out_len);
+#ifdef CONFIG_SHA384
+	if (hash_len == 48)
+		return sha384_prf(k, hash_len, label,
+				  context, context_len, out, out_len);
+#endif /* CONFIG_SHA384 */
+#ifdef CONFIG_SHA512
+	if (hash_len == 64)
+		return sha512_prf(k, hash_len, label,
+				  context, context_len, out, out_len);
+#endif /* CONFIG_SHA512 */
+	return -1;
+}
+```
+
+================================================================================
+5. EAPOL 과정이 시작되는 로직
+================================================================================
+
+파일: hostap/src/ap/wpa_auth.c
+
+5.1. STA Association 후 EAPOL 시작 함수
+함수: wpa_auth_sta_associated()
+위치: wpa_auth.c:1037-1087
+설명: STA이 Association된 후 EAPOL 인증을 시작하는 함수
+
+매개변수:
+- wpa_auth: struct wpa_authenticator * - WPA 인증 구조체
+- sm: struct wpa_state_machine * - WPA 상태 머신
+
+반환값:
+- int - 성공 시 0, 실패 시 -1
+
+주요 로직:
+```1037:1087:hostap/src/ap/wpa_auth.c
+int wpa_auth_sta_associated(struct wpa_authenticator *wpa_auth,
+			    struct wpa_state_machine *sm)
+{
+	if (!wpa_auth || !wpa_auth->conf.wpa || !sm)
+		return -1;
+
+#ifdef CONFIG_IEEE80211R_AP
+	if (sm->ft_completed) {
+		wpa_auth_logger(wpa_auth, wpa_auth_get_spa(sm), LOGGER_DEBUG,
+				"FT authentication already completed - do not start 4-way handshake");
+		/* Go to PTKINITDONE state to allow GTK rekeying */
+		sm->wpa_ptk_state = WPA_PTK_PTKINITDONE;
+		sm->Pair = true;
+		return 0;
+	}
+#endif /* CONFIG_IEEE80211R_AP */
+
+#ifdef CONFIG_FILS
+	if (sm->fils_completed) {
+		wpa_auth_logger(wpa_auth, wpa_auth_get_spa(sm), LOGGER_DEBUG,
+				"FILS authentication already completed - do not start 4-way handshake");
+		/* Go to PTKINITDONE state to allow GTK rekeying */
+		sm->wpa_ptk_state = WPA_PTK_PTKINITDONE;
+		sm->Pair = true;
+		return 0;
+	}
+#endif /* CONFIG_FILS */
+
+	if (sm->started) {
+		os_memset(&sm->key_replay, 0, sizeof(sm->key_replay));
+		sm->ReAuthenticationRequest = true;
+		return wpa_sm_step(sm);
+	}
+
+	wpa_auth_logger(wpa_auth, wpa_auth_get_spa(sm), LOGGER_DEBUG,
+			"start authentication");
+	sm->started = 1;
+
+	sm->Init = true;
+	if (wpa_sm_step(sm) == 1)
+		return 1; /* should not really happen */
+	sm->Init = false;
+
+	if (wpa_auth_4way_handshake_offload(sm->wpa_auth))
+		wpa_auth_logger(wpa_auth, sm->addr, LOGGER_DEBUG,
+				"Skip EAPOL for 4-way handshake offload case");
+	else
+		sm->AuthenticationRequest = true;
+
+	return wpa_sm_step(sm);
+}
+```
+
+5.2. WPA 상태 머신 단계 처리
+함수: wpa_sm_step()
+위치: wpa_auth.c
+설명: WPA 상태 머신의 한 단계를 처리하는 함수
+
+매개변수:
+- sm: struct wpa_state_machine * - WPA 상태 머신
+
+반환값:
+- int - 상태 머신 진행 결과
+
+5.3. Association 완료 시 호출
+위치: hostapd.c:4184
+설명: Association이 완료된 후 호출되는 지점
+
+주요 로직:
+```4184:4184:hostap/src/ap/hostapd.c
+		wpa_auth_sta_associated(hapd->wpa_auth, sta->wpa_sm);
+```
+
+5.4. EAPOL Key Frame 전송 트리거
+설명: sm->AuthenticationRequest가 true로 설정되면, wpa_sm_step() 내부에서
+EAPOL Key Frame을 전송하여 4-way handshake를 시작합니다.
+
+상수:
+- WPA_PTK_INITIALIZE: PTK 초기화 상태
+- WPA_PTK_START: PTK 시작 상태
+- WPA_PTK_PTKINITNEGOTIATING: PTK 협상 중 상태
+- WPA_PTK_PTKINITDONE: PTK 초기화 완료 상태
+
+5.5. EAPOL 인증 상태 머신 (AP 측)
+파일: hostap/src/eapol_auth/eapol_auth_sm.c
+
+함수: SM_STEP(AUTH_PAE)
+위치: eapol_auth_sm.c:390-451
+설명: EAPOL 인증 상태 머신의 단계 처리
+
+주요 로직:
+```390:451:hostap/src/eapol_auth/eapol_auth_sm.c
+SM_STEP(AUTH_PAE)
+{
+	if ((sm->portControl == Auto && sm->portMode != sm->portControl) ||
+	    sm->initialize || !sm->eap_if->portEnabled)
+		SM_ENTER_GLOBAL(AUTH_PAE, INITIALIZE);
+	else if (sm->portControl == ForceAuthorized &&
+		 sm->portMode != sm->portControl &&
+		 !(sm->initialize || !sm->eap_if->portEnabled))
+		SM_ENTER_GLOBAL(AUTH_PAE, FORCE_AUTH);
+	else if (sm->portControl == ForceUnauthorized &&
+		 sm->portMode != sm->portControl &&
+		 !(sm->initialize || !sm->eap_if->portEnabled))
+		SM_ENTER_GLOBAL(AUTH_PAE, FORCE_UNAUTH);
+	else {
+		switch (sm->auth_pae_state) {
+		case AUTH_PAE_INITIALIZE:
+			SM_ENTER(AUTH_PAE, DISCONNECTED);
+			break;
+		case AUTH_PAE_DISCONNECTED:
+			if (!sm->stopped)
+				SM_ENTER(AUTH_PAE, RESTART);
+			break;
+		case AUTH_PAE_RESTART:
+			if (!sm->eap_if->eapRestart)
+				SM_ENTER(AUTH_PAE, CONNECTING);
+			break;
+		case AUTH_PAE_CONNECTING:
+			if (sm->eapolLogoff || sm->reAuthCount > sm->reAuthMax)
+				SM_ENTER(AUTH_PAE, DISCONNECTED);
+			else if ((sm->eap_if->eapReq &&
+				  sm->reAuthCount <= sm->reAuthMax) ||
+				 sm->eap_if->eapSuccess || sm->eap_if->eapFail)
+				SM_ENTER(AUTH_PAE, AUTHENTICATING);
+			break;
+		case AUTH_PAE_AUTHENTICATED:
+			if (sm->eapolStart || sm->reAuthenticate)
+				SM_ENTER(AUTH_PAE, RESTART);
+			else if (sm->eapolLogoff || !sm->portValid)
+				SM_ENTER(AUTH_PAE, DISCONNECTED);
+			break;
+		case AUTH_PAE_AUTHENTICATING:
+			if (sm->authSuccess && sm->portValid)
+				SM_ENTER(AUTH_PAE, AUTHENTICATED);
+			else if (sm->authFail ||
+				 (sm->keyDone && !sm->portValid))
+				SM_ENTER(AUTH_PAE, HELD);
+			else if (sm->eapolStart || sm->eapolLogoff ||
+				 sm->authTimeout)
+				SM_ENTER(AUTH_PAE, ABORTING);
+			break;
+		}
+	}
+}
+```
+
+================================================================================
+요약
+================================================================================
+
+WPA3 SAE 프로세스의 주요 흐름:
+
+1. Beacon Frame 전송:
+   - ieee802_11_set_beacon() -> hostapd_get_rsne() -> wpa_auth_get_wpa_ie()
+   - RSNE와 RSNXE에 SAE 키 관리 방법 포함
+
+2. Authentication 시작:
+   - handle_auth() -> handle_auth_sae() -> sae_sm_step()
+   - auth_transaction == 1: Commit 메시지 교환
+   - auth_transaction == 2: Confirm 메시지 교환
+
+3. Association 처리:
+   - handle_assoc() -> wpa_auth_sta_associated()
+   - SAE 인증 완료 후 Association 허용
+
+4. 키 연산:
+   - sae_process_commit() -> sae_derive_k_ecc()/sae_derive_k_ffc()
+   - sae_derive_keys() -> sae_kdf_hash()
+   - KCK, PMK, PMKID 도출
+
+5. EAPOL 4-way Handshake:
+   - wpa_auth_sta_associated() -> wpa_sm_step()
+   - EAPOL Key Frame을 통한 PTK 협상
+
+================================================================================
+

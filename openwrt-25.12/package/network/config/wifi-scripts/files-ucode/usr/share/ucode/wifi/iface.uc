@@ -61,6 +61,15 @@ export function parse_encryption(config, dev_config) {
 		config.auth_type = 'psk-sae';
 		break;
 
+	// [Standard Extension Draft] add PQC Auth Type parser
+	case 'sae-pqc-512':
+		config.auth_type = 'sae-pqc-512';
+		break;
+
+	case 'sae-pqc-768':
+		config.auth_type = 'sae-pqc-768';
+		break;
+
 	case 'wpa':
 	case 'wpa2':
 	case 'wpa-mixed':
@@ -170,6 +179,17 @@ export function wpa_key_mgmt(config) {
 		append_value(config, 'wpa_key_mgmt', 'SAE');
 		if (config.ieee80211r)
 			append_value(config, 'wpa_key_mgmt', 'FT-SAE');
+		break;
+
+// [Standard Extension Draft] add PQC Key Mgmt mapper
+	case 'sae-pqc-512':
+		append_value(config, 'wpa_key_mgmt', 'SAE-PQC-512');
+		config.ieee80211w = 2;
+		break;
+
+	case 'sae-pqc-768':
+		append_value(config, 'wpa_key_mgmt', 'SAE-PQC-768');
+		config.ieee80211w = 2;
 		break;
 
 	case 'psk-sae':
