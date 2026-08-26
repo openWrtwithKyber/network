@@ -5,15 +5,13 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=hostapd
-PKG_VERSION:=2025.08.26
 PKG_RELEASE:=1
 
-#--로컬에서 코드를 가져오기 위해 주석처리--#
-#PKG_SOURCE_URL:=https://w1.fi/hostap.git
-#PKG_SOURCE_PROTO:=git
-#PKG_SOURCE_DATE:=2025-08-26
-#PKG_SOURCE_VERSION:=ca266cc24d8705eb1a2a0857ad326e48b1408b20
-#PKG_MIRROR_HASH:=59ac677093f524ff98588abd9f33805a336a6e929d6814222f0d784c854f2343
+PKG_SOURCE_URL:=https://w1.fi/hostap.git
+PKG_SOURCE_PROTO:=git
+PKG_SOURCE_DATE:=2025-08-26
+PKG_SOURCE_VERSION:=ca266cc24d8705eb1a2a0857ad326e48b1408b20
+PKG_MIRROR_HASH:=59ac677093f524ff98588abd9f33805a336a6e929d6814222f0d784c854f2343
 
 PKG_MAINTAINER:=Felix Fietkau <nbd@nbd.name>
 PKG_LICENSE:=BSD-3-Clause
@@ -50,14 +48,13 @@ LOCAL_AND_LIB_VARIANT=$(patsubst hostapd-%,%,\
 		      $(patsubst supplicant-%,%,\
 		      $(BUILD_VARIANT)\
 		      )))
-# pqc-openssl 처리 추가
+
 LOCAL_VARIANT=$(patsubst %-internal,%,\
 	      $(patsubst %-openssl,%,\
 	      $(patsubst %-wolfssl,%,\
 	      $(patsubst %-mbedtls,%,\
-	      $(patsubst %-pqc-openssl,%,\
 	      $(LOCAL_AND_LIB_VARIANT)\
-	      )))))
+	      ))))
 
 SSL_VARIANT=$(strip \
 		$(if $(findstring openssl,$(LOCAL_AND_LIB_VARIANT)),openssl,\
@@ -111,6 +108,7 @@ DRIVER_MAKEOPTS= \
 ifeq ($(SSL_VARIANT),openssl)
   DRIVER_MAKEOPTS += CONFIG_TLS=openssl CONFIG_SAE=y
   TARGET_LDFLAGS += -lcrypto -lssl
+
   ifeq ($(LOCAL_VARIANT),basic)
     DRIVER_MAKEOPTS += CONFIG_OWE=y
   endif
@@ -119,10 +117,6 @@ ifeq ($(SSL_VARIANT),openssl)
   endif
   ifeq ($(LOCAL_VARIANT),full)
     DRIVER_MAKEOPTS += CONFIG_OWE=y CONFIG_SUITEB192=y CONFIG_AP=y CONFIG_MESH=y CONFIG_EAP_PWD=y CONFIG_DPP=y CONFIG_DPP2=y
-  endif
-	ifeq ($(LOCAL_VARIANT),pqc)
-    DRIVER_MAKEOPTS += CONFIG_SUITEB192=y CONFIG_AP=y CONFIG_IEEE80211W=y CONFIG_PQC=y CONFIG_GCMP=y
-		TARGET_LDFLAGS += -loqs
   endif
 endif
 
@@ -155,7 +149,6 @@ ifeq ($(SSL_VARIANT),mbedtls)
     DRIVER_MAKEOPTS += CONFIG_OWE=y CONFIG_SUITEB192=y CONFIG_AP=y CONFIG_MESH=y CONFIG_WPS_NFC=1 CONFIG_EAP_PWD=y CONFIG_DPP=y CONFIG_DPP2=y
   endif
 endif
-
 
 ifneq ($(LOCAL_TYPE),hostapd)
   ifdef CONFIG_WPA_RFKILL_SUPPORT
@@ -218,7 +211,6 @@ endef
 
 Package/hostapd-mbedtls/description = $(Package/hostapd/description)
 
-
 define Package/hostapd-basic
 $(call Package/hostapd/Default,$(1))
   TITLE+= (WPA-PSK, 11r, 11w)
@@ -273,7 +265,6 @@ define Package/hostapd-mini/description
 endef
 
 
-
 define Package/wpad/Default
   SECTION:=net
   CATEGORY:=Network
@@ -308,20 +299,6 @@ $(call Package/wpad/Default,$(1))
 endef
 
 Package/wpad-openssl/description = $(Package/wpad/description)
-
-# openssl 기반 PQC 지원 hostapd/wpa_supplicant 패키지 추가
-define Package/wpad-pqc-openssl
-$(call Package/wpad/Default,$(1))
-  TITLE+= (OpenSSL WPA3-SAE and PQC)
-  VARIANT:=wpad-pqc-openssl
-  DEPENDS+=$(OPENSSL_DEPENDS) +liboqs
-endef
-
-define Package/wpad-pqc-openssl/description
- This package contains a full featured IEEE 802.1x/WPA/EAP/RADIUS Authenticator and Supplicant.
- Included WPA3-SAE support and Post-Quantum Cryptography support using liboqs.
- Uses OpenSSL for TLS/crypto operations, supporting Suite B (GCMP-256).
-endef
 
 define Package/wpad-wolfssl
 $(call Package/wpad/Default,$(1))
@@ -606,19 +583,6 @@ ifneq ($(wildcard $(PKG_BUILD_DIR)/.config_*),$(subst .configured_,.config_,$(ST
   endef
 endif
 
-define Build/Prepare
-	mkdir -p $(PKG_BUILD_DIR)
-	rm -rf $(PKG_BUILD_DIR)/*
-	rsync -av --exclude '.git' $(TOPDIR)/../hostap/ $(PKG_BUILD_DIR)/
-
-	cp -fpR ./src/* $(PKG_BUILD_DIR)/ 2>/dev/null || :
-
-	if [ -d "$(PKG_BUILD_DIR)/../hostapd" ]; then \
-		rsync -av --exclude '.git' $(PKG_BUILD_DIR)/ $(PKG_BUILD_DIR)/../hostapd/; \
-	fi
-	$(Build/Patch)
-endef
-
 define Build/Configure
 	$(Build/Configure/rebuild)
 	$(if $(wildcard ./files/hostapd-$(CONFIG_VARIANT).config), \
@@ -742,7 +706,6 @@ Package/wpad-mesh-wolfssl/conffiles = $(Package/hostapd-full/conffiles)
 Package/wpad-mesh-mbedtls/conffiles = $(Package/hostapd-full/conffiles)
 Package/wpad/conffiles = $(Package/hostapd-full/conffiles)
 Package/wpad-openssl/conffiles = $(Package/hostapd-full/conffiles)
-Package/wpad-pqc-openssl/conffiles = $(Package/hostapd-full/conffiles)
 Package/wpad-wolfssl/conffiles = $(Package/hostapd-full/conffiles)
 Package/wpad-mbedtls/conffiles = $(Package/hostapd-full/conffiles)
 Package/hostapd/conffiles = $(Package/hostapd-full/conffiles)
@@ -808,7 +771,6 @@ Package/wpad-basic-wolfssl/install = $(Package/wpad/install)
 Package/wpad-basic-mbedtls/install = $(Package/wpad/install)
 Package/wpad-mini/install = $(Package/wpad/install)
 Package/wpad-openssl/install = $(Package/wpad/install)
-Package/wpad-pqc-openssl/install = $(Package/wpad/install)
 Package/wpad-wolfssl/install = $(Package/wpad/install)
 Package/wpad-mbedtls/install = $(Package/wpad/install)
 Package/wpad-mesh-openssl/install = $(Package/wpad/install)
@@ -886,7 +848,6 @@ $(eval $(call BuildPackage,wpad-basic-wolfssl))
 $(eval $(call BuildPackage,wpad-basic-mbedtls))
 $(eval $(call BuildPackage,wpad-mini))
 $(eval $(call BuildPackage,wpad-openssl))
-$(eval $(call BuildPackage,wpad-pqc-openssl))
 $(eval $(call BuildPackage,wpad-wolfssl))
 $(eval $(call BuildPackage,wpad-mbedtls))
 $(eval $(call BuildPackage,wpa-supplicant))

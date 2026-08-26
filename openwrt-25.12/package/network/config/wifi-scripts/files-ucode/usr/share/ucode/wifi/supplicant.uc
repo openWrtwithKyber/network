@@ -57,8 +57,8 @@ export function ratelist(rates) {
 
 function setup_sta(data, config) {
 	iface.parse_encryption(config);
-// [Standard Extension Draft] add PQC Key Mgmt mapper
-	if (config.auth_type in [ 'sae', 'owe', 'eap2', 'eap192', 'sae-pqc-512', 'sae-pqc-768' ])
+
+	if (config.auth_type in [ 'sae', 'owe', 'eap2', 'eap192' ])
 		config.ieee80211w = 2;
 	else if (config.auth_type in [ 'psk-sae' ])
 		config.ieee80211w = 1;
@@ -130,13 +130,10 @@ function setup_sta(data, config) {
 	case 'psk2':
 	case 'sae':
 	case 'psk-sae':
-  // [Standard Extension Draft] add PQC Key Mgmt mapper
-  case 'sae-pqc-512':
-  case 'sae-pqc-768':
 		if (config.mode != 'mesh')
 			iface.wpa_key_mgmt(config);
 
-		if (config.mode == 'mesh' || config.auth_type in ['sae', 'sae-pqc-512', 'sae-pqc-768'])
+		if (config.mode == 'mesh' || config.auth_type == 'sae')
 			config.sae_password = `"${config.key}"`;
 		else
 			config.psk = `"${config.key}"`;
