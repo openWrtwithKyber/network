@@ -1157,10 +1157,17 @@ static void wpa_free_sta_sm(struct wpa_state_machine *sm)
 	if (sm->kyber_privkey) {
 		bin_clear_free(sm->kyber_privkey, sm->kyber_privkey_len);
 		sm->kyber_privkey = NULL;
-  }
-  if (sm->kyber_shared_secret) {
-    bin_clear_free(sm->kyber_shared_secret, sm->kyber_shared_secret_len);
-    sm->kyber_shared_secret = NULL;
+		sm->kyber_privkey_len = 0;
+	}
+	if (sm->kyber_pubkey) {
+		os_free(sm->kyber_pubkey);
+		sm->kyber_pubkey = NULL;
+		sm->kyber_pubkey_len = 0;
+	}
+	if (sm->kyber_shared_secret) {
+		bin_clear_free(sm->kyber_shared_secret, sm->kyber_shared_secret_len);
+		sm->kyber_shared_secret = NULL;
+		sm->kyber_shared_secret_len = 0;
 	}
 #endif /* CONFIG_PQC */
 
@@ -2110,11 +2117,18 @@ void wpa_receive(struct wpa_authenticator *wpa_auth,
         }
         pqc_cleanup:
         
-        /* 5. Securely erase private key (success or failure) */
+        /* 5. Securely erase private key + free pubkey (success or failure).
+         * After Msg 2/4 has been received, pubkey is no longer needed: any
+         * further Msg 1/4 retransmit would be a protocol violation anyway. */
         if (sm->kyber_privkey) {
             bin_clear_free(sm->kyber_privkey, sm->kyber_privkey_len);
             sm->kyber_privkey = NULL;
             sm->kyber_privkey_len = 0;
+        }
+        if (sm->kyber_pubkey) {
+            os_free(sm->kyber_pubkey);
+            sm->kyber_pubkey = NULL;
+            sm->kyber_pubkey_len = 0;
         }
         
         /* 6. Always free parsing buffer */
@@ -2483,16 +2497,14 @@ static void wpa_send_eapol(struct wpa_authenticator *wpa_auth,
 
 #ifdef CONFIG_PQC
 	/* [Standard Extension Draft] Kyber Key Injection Logic
-	 * Condition: Msg 1 (Pairwise && ACK && !MIC && First Attempt)
-	 */
+	 * Condition: Msg 1 (Pairwise && ACK && !MIC).
+	 * Keypair is generated on first attempt (ctr == 1); on retransmits,
+	 * the pubkey stored in sm is reused so the STA sees the same pubkey
+	 * it must encapsulate against. */
 	if (pairwise && (key_info & WPA_KEY_INFO_ACK) &&
-	    !(key_info & WPA_KEY_INFO_MIC) && (ctr == 1)) {
+	    !(key_info & WPA_KEY_INFO_MIC)) {
 
 		if (sm->wpa_key_mgmt & (WPA_KEY_MGMT_SAE_PQC_512 | WPA_KEY_MGMT_SAE_PQC_768)) {
-			
-			wpa_printf(MSG_DEBUG, "PQC: Generating Kyber Keypair for Msg 1...");
-
-			/* 1. Algorithm Selection & Type Definition */
 			const char *kem_alg_name = NULL;
 			u8 type_suite = 0; /* Data Type: 0x1F(31) or 0x20(32) */
 
@@ -2504,89 +2516,97 @@ static void wpa_send_eapol(struct wpa_authenticator *wpa_auth,
 				type_suite = RSN_KEY_DATA_PQC_512_TYPE; /* 0x1F(31) */
 			}
 
-			/* 2. Init & Alloc */
-			OQS_KEM *kem = OQS_KEM_new(kem_alg_name);
-			if (!kem) {
-				wpa_printf(MSG_ERROR, "PQC: OQS init failed");
-				goto pqc_error;
-			}
+			/* 1. First attempt: generate keypair and persist it in SM */
+			if (ctr == 1) {
+				wpa_printf(MSG_DEBUG, "PQC: Generating Kyber Keypair for Msg 1...");
 
-			pubkey_len = kem->length_public_key;
-			privkey_len = kem->length_secret_key;
-			pqc_pubkey = os_zalloc(pubkey_len);
-			pqc_privkey = os_zalloc(privkey_len);
-
-			if (!pqc_pubkey || !pqc_privkey) {
-				wpa_printf(MSG_ERROR, "PQC: Memory alloc failed");
-				OQS_KEM_free(kem);
-				goto pqc_error;
-			}
-
-			/* 3. Generate Keypair */
-			if (OQS_KEM_keypair(kem, pqc_pubkey, pqc_privkey) != OQS_SUCCESS) {
-				wpa_printf(MSG_ERROR, "PQC: Keygen failed");
-				OQS_KEM_free(kem);
-				goto pqc_error;
-			}
-			OQS_KEM_free(kem);
-
-			/* 4. Create Expanded KDE with Optimized Size */
-			kyber_kde = os_zalloc(kde_len + pubkey_len + PQC_KDE_HEADER_OVERHEAD);
-			if (kyber_kde) {
-				u8 *pos = kyber_kde;
-
-				if (kde && kde_len > 0) {
-					os_memcpy(pos, kde, kde_len);
-					pos += kde_len;
+				OQS_KEM *kem = OQS_KEM_new(kem_alg_name);
+				if (!kem) {
+					wpa_printf(MSG_ERROR, "PQC: OQS init failed");
+					goto pqc_error;
 				}
 
-				/* Fragment Kyber PubKey with Control Bitmask */
-				size_t left = pubkey_len;
-				u8 *kpos = pqc_pubkey;
-				u8 frag_seq = 0; /* Sequence Number (0~7) */
+				pubkey_len = kem->length_public_key;
+				privkey_len = kem->length_secret_key;
+				pqc_pubkey = os_zalloc(pubkey_len);
+				pqc_privkey = os_zalloc(privkey_len);
 
-				while (left > 0) {
-					size_t chunk = (left > PQC_KDE_MAX_FRAGMENT) ? 
-					               PQC_KDE_MAX_FRAGMENT : left;
-					
-					/* Control Byte Construction 
-					 * Bit 0:   More Fragments (1=continues, 0=last)
-           * Bit 1-3: Sequence (0-7)
-           * Bit 4-7: Reserved (must be 0)
-           */
-					u8 control = (frag_seq & 0x07) << 1; 
-					if (left > chunk) {
-						control |= 0x01; /* More Fragments */
+				if (!pqc_pubkey || !pqc_privkey) {
+					wpa_printf(MSG_ERROR, "PQC: Memory alloc failed");
+					OQS_KEM_free(kem);
+					goto pqc_error;
+				}
+
+				if (OQS_KEM_keypair(kem, pqc_pubkey, pqc_privkey) != OQS_SUCCESS) {
+					wpa_printf(MSG_ERROR, "PQC: Keygen failed");
+					OQS_KEM_free(kem);
+					goto pqc_error;
+				}
+				OQS_KEM_free(kem);
+
+				/* Store both keys in SM so retransmits can reuse them */
+				if (sm->kyber_privkey) bin_clear_free(sm->kyber_privkey, sm->kyber_privkey_len);
+				sm->kyber_privkey = pqc_privkey;
+				sm->kyber_privkey_len = privkey_len;
+				pqc_privkey = NULL;
+
+				if (sm->kyber_pubkey) os_free(sm->kyber_pubkey);
+				sm->kyber_pubkey = pqc_pubkey;
+				sm->kyber_pubkey_len = pubkey_len;
+				pqc_pubkey = NULL;
+			}
+
+			/* 2. Build fragmented KDE from stored pubkey (same for first + retransmits) */
+			if (sm->kyber_pubkey && sm->kyber_pubkey_len > 0) {
+				size_t pk_len = sm->kyber_pubkey_len;
+				kyber_kde = os_zalloc(kde_len + pk_len + PQC_KDE_HEADER_OVERHEAD);
+				if (kyber_kde) {
+					u8 *pos = kyber_kde;
+
+					if (kde && kde_len > 0) {
+						os_memcpy(pos, kde, kde_len);
+						pos += kde_len;
 					}
-					
-					*pos++ = WLAN_EID_VENDOR_SPECIFIC; 
-					*pos++ = 6 + chunk; /* Len: OUI(3)+Type(1)+Sub(1)+Ctrl(1)+Data */
-					*pos++ = 0x00; *pos++ = 0x0f; *pos++ = 0xac; /* OUI */
-					*pos++ = type_suite; /* Data Type (0x20 or 0x21) */
-					*pos++ = 1;          /* Subtype 1 (Pub) */
-					*pos++ = control;    /* Control Field (Bitmask) */
-					
-					os_memcpy(pos, kpos, chunk);
-					pos += chunk; 
-					kpos += chunk; 
-					left -= chunk;
-					frag_seq++;
-				}
-				
-				kyber_kde_len = pos - kyber_kde;
-				wpa_printf(MSG_DEBUG, 
-				           "PQC: Kyber PubKey attached (%zu bytes, %u fragments)", 
-				           kyber_kde_len, frag_seq);
-			}
 
-			/* 5. Store Private Key in SM */
-			if (sm->kyber_privkey) bin_clear_free(sm->kyber_privkey, sm->kyber_privkey_len);
-			sm->kyber_privkey = pqc_privkey;
-			sm->kyber_privkey_len = privkey_len;
-			pqc_privkey = NULL; 
-			
-			os_free(pqc_pubkey);
-			pqc_pubkey = NULL;
+					/* Fragment Kyber PubKey with Control Bitmask */
+					size_t left = pk_len;
+					u8 *kpos = sm->kyber_pubkey;
+					u8 frag_seq = 0; /* Sequence Number (0~7) */
+
+					while (left > 0) {
+						size_t chunk = (left > PQC_KDE_MAX_FRAGMENT) ?
+						               PQC_KDE_MAX_FRAGMENT : left;
+
+						/* Control Byte Construction
+						 * Bit 0:   More Fragments (1=continues, 0=last)
+						 * Bit 1-3: Sequence (0-7)
+						 * Bit 4-7: Reserved (must be 0)
+						 */
+						u8 control = (frag_seq & 0x07) << 1;
+						if (left > chunk) {
+							control |= 0x01; /* More Fragments */
+						}
+
+						*pos++ = WLAN_EID_VENDOR_SPECIFIC;
+						*pos++ = 6 + chunk; /* Len: OUI(3)+Type(1)+Sub(1)+Ctrl(1)+Data */
+						*pos++ = 0x00; *pos++ = 0x0f; *pos++ = 0xac; /* OUI */
+						*pos++ = type_suite; /* Data Type (0x20 or 0x21) */
+						*pos++ = 1;          /* Subtype 1 (Pub) */
+						*pos++ = control;    /* Control Field (Bitmask) */
+
+						os_memcpy(pos, kpos, chunk);
+						pos += chunk;
+						kpos += chunk;
+						left -= chunk;
+						frag_seq++;
+					}
+
+					kyber_kde_len = pos - kyber_kde;
+					wpa_printf(MSG_DEBUG,
+					           "PQC: Kyber PubKey attached (%zu bytes, %u fragments, ctr=%u)",
+					           kyber_kde_len, frag_seq, ctr);
+				}
+			}
 		}
 	}
 

@@ -31,7 +31,7 @@ if [ "$1" == "full" ]; then
     echo "🎉 Script exiting early as full build was requested and succeeded."
     exit 0
 else
-    echo "⏩ Skipping full build. (Run './build.sh full' if dependencies are missing)"
+    echo "⏩ Skipping full build. (Run './build_hostapd.sh full' if dependencies are missing)"
 fi
 
 echo "----------------------------------------------------"

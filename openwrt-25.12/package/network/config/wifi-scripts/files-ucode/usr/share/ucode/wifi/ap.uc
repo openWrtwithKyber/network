@@ -80,9 +80,9 @@ function iface_accounting_server(config) {
 
 	append_vars(config, [ 'radius_acct_req_attr' ]);
 }
-
+// [Standard Extension Draft] add PQC Key Mgmt mapper
 function iface_auth_type(config) {
-	if (config.auth_type in [ 'sae', 'owe', 'eap2', 'eap192' ]) {
+	if (config.auth_type in [ 'sae', 'owe', 'eap2', 'eap192', 'sae-pqc-512', 'sae-pqc-768' ]) {
 		config.ieee80211w = 2;
 		config.sae_require_mfp = 1;
 		if (!config.ppsk)
@@ -120,6 +120,9 @@ function iface_auth_type(config) {
 	case 'psk2':
 	case 'sae':
 	case 'psk-sae':
+  // [Standard Extension Draft] add PQC Key Mgmt mapper
+  case 'sae-pqc-512':
+  case 'sae-pqc-768':
 		config.vlan_possible = 1;
 		config.wps_possible = 1;
 
@@ -139,8 +142,8 @@ function iface_auth_type(config) {
 			set_default(config, 'wpa_psk_file', `/var/run/hostapd-${config.ifname}.psk`);
 			touch_file(config.wpa_psk_file);
 		}
-
-		if (config.auth_type in [ 'sae', 'psk-sae' ]) {
+    // [Standard Extension Draft] add PQC Key Mgmt mapper
+		if (config.auth_type in [ 'sae', 'psk-sae', 'sae-pqc-512', 'sae-pqc-768' ]) {
 			set_default(config, 'sae_password_file', `/var/run/hostapd-${config.ifname}.sae`);
 			touch_file(config.sae_password_file);
 		}
@@ -398,8 +401,8 @@ function iface_mfp(config) {
 		append('ieee80211w', 0);
 		return;
 	}
-
-	if (config.auth_type == 'eap192')
+  // [Standard Extension Draft] add PQC Key Mgmt mapper
+	if (config.auth_type in ['eap192', 'sae-pqc-512', 'sae-pqc-768'])
 		config.group_mgmt_cipher = 'BIP-GMAC-256';
 	else
 		config.group_mgmt_cipher = config.ieee80211w_mgmt_cipher ?? 'AES-128-CMAC';
@@ -421,7 +424,8 @@ function iface_key_caching(config) {
 			'rsn_preauth', 'rsn_preauth_interfaces'
 		]);
 	} else {
-		set_default(config, 'okc', (config.auth_type in  [ 'sae', 'psk-sae', 'owe' ]));
+    // [Standard Extension Draft] add PQC Key Mgmt mapper
+		set_default(config, 'okc', (config.auth_type in  [ 'sae', 'psk-sae', 'owe', 'sae-pqc-512', 'sae-pqc-768' ]));
 	}
 
 	if (!config.okc && !config.fils)
@@ -478,7 +482,8 @@ export function generate(interface, data, config, vlans, stas, phy_features) {
 
 	if (config.auth_type in [ 'psk', 'psk-sae' ])
 		iface_wpa_stations(config, stas);
-	if (config.auth_type in [ 'sae', 'psk-sae' ])
+  // [Standard Extension Draft] add PQC Key Mgmt mapper
+	if (config.auth_type in [ 'sae', 'psk-sae', 'sae-pqc-512', 'sae-pqc-768' ])
 		iface_sae_stations(config, stas);
 
 	iface_auth_type(config);
