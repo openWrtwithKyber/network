@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-only
 #
 # Copyright (C) 2006-2021 OpenWrt.org
-
+# Modified by 80211-PQC, 2026
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=hostapd
